@@ -67,15 +67,15 @@ satisfiesM node shex@NodeConstraint{} m = return $ satisfies2 shex node
 
 satisfiesM node (ShapeOr _ exprs) m  = do
   gr <- askGraph
-  return $ any (\expr -> satisfies node expr gr m) exprs
+  anyM (\expr -> satisfiesM node expr m) exprs
 
 satisfiesM node (ShapeAnd _ exprs) m = do
   gr <- askGraph
-  return $ all (\expr -> satisfies node expr gr m) exprs
+  allM (\expr -> satisfiesM node expr m) exprs
 
 satisfiesM node (ShapeNot _ expr) m = do
   gr <- askGraph
-  return $ not $ satisfies node expr gr m
+  not <$> satisfiesM node expr m
 
 satisfiesM node Shape{..} m = do
   gr <- askGraph
@@ -90,3 +90,10 @@ satisfiesM node (ShapeRef label) m = do
   case expr of
     Just justExpr -> satisfiesM node justExpr m
     _             -> return False
+
+
+anyM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+anyM p t = or <$> mapM p t
+
+allM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+allM p t = and <$> mapM p t

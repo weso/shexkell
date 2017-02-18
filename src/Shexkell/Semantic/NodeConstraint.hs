@@ -13,6 +13,7 @@ import Shexkell.Data.Common
 import Shexkell.Data.ShapeExpr
 import Data.RDF (Node(..), LValue(TypedL))
 import Data.String
+import Data.Maybe (fromMaybe)
 
 -- | Check if a node satisfies a node constraint
 satisfies2 ::
@@ -79,5 +80,4 @@ optSatisfies ::
     (a -> Bool) -- ^ Predicate
  -> Maybe a     -- ^ Input
  -> Bool
-optSatisfies _ Nothing = True
-optSatisfies f (Just x) = f x
+optSatisfies predicate input = fromMaybe True (predicate <$> input)

@@ -1,2 +1,9 @@
+import Shexkell.Semantic.NeighbourhoodTest
+
+import Test.HUnit
+
+import Control.Monad
+
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = void $ runTestTT neighbourhoodTests

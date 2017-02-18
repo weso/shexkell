@@ -16,10 +16,20 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Shexkell.Data.ShEx
+                     , Shexkell.Data.Common
+                     , Shexkell.Data.ShapeExpr
+                     , Shexkell.Data.TripleExpr
+                     , Shexkell.Semantic.Validation
+                     , Shexkell.Semantic.NodeConstraint
+                     , Shexkell.Semantic.Shape
+                     , Shexkell.Semantic.Neighbourhood
   build-depends:       base >= 4.7 && < 5
                      , parsec
                      , rdf4h >= 3.0.1
                      , containers >= 0.5.7.1
+                     , composition >= 1.0.2.1
+                     , deepseq >= 1.4.2.0
+                     , mtl >= 2.2.1
   default-language:    Haskell2010
 
 executable Shexkell-exe
@@ -33,9 +43,12 @@ executable Shexkell-exe
 test-suite Shexkell-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
+  other-modules:       Shexkell.Semantic.NeighbourhoodTest
   main-is:             Spec.hs
   build-depends:       base
                      , Shexkell
+                     , rdf4h >= 3.0.1
+                     , HUnit >= 1.5.0.0
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

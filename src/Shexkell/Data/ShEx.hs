@@ -48,8 +48,8 @@ data TripleExpr = EachOf {
   , annotations  :: Maybe [Annotation]
 } | OneOf {
     expressions :: [TripleExpr]
-  , min :: Maybe Int
-  , max :: Maybe Max
+  , cardMin :: Maybe Int
+  , cardMax :: Maybe Max
   , triplSemActs :: Maybe [SemAct]
   , annotations :: Maybe [Annotation]
 } | TripleConstraint {
@@ -57,14 +57,15 @@ data TripleExpr = EachOf {
   , negated :: Maybe Bool
   , predicate :: IRI
   , valueExpr :: Maybe ShapeExpr
-  , min :: Maybe Int
-  , max :: Maybe Max
+  , cardMin :: Maybe Int
+  , cardMax :: Maybe Max
   , triplSemActs :: Maybe [SemAct]
   , annotations :: Maybe [Annotation]
 } | Inclusion ShapeLabel
 
 
-type ShapeMap = Map.Map Node ShapeExpr
+newtype ShapeMap = ShapeMap { shapeMap :: Map.Map Node ShapeExpr }
+
 
 shexId :: ShapeExpr -> Maybe ShapeLabel
 shexId NodeConstraint{..} = shapeId
@@ -74,6 +75,19 @@ shexId (ShapeAnd lbl _) = lbl
 shexId (ShapeNot lbl _) = lbl
 shexId (ShapeRef _) = Nothing
 shexId (ShapeExternal lbl) = lbl
+
+
+triplMin :: TripleExpr -> Maybe Int
+triplMin EachOf{..} = cardMin
+triplMin OneOf{..}  = cardMin
+triplMin TripleConstraint{..} = cardMin
+triplMin _ = Nothing
+
+triplMax :: TripleExpr -> Maybe Max
+triplMax EachOf{..} = cardMax
+triplMax OneOf{..}  = cardMax
+triplMax TripleConstraint{..} = cardMax
+triplMax _ = Nothing
 
 instance NFData ShapeExpr where
   rnf NodeConstraint{..} =

@@ -11,9 +11,13 @@ module Shexkell.Semantic.NodeConstraint
 import Shexkell.Data.ShEx
 import Shexkell.Data.Common
 import Shexkell.Data.ShapeExpr
+import Shexkell.Semantic.Datatype
 import Data.RDF (Node(..), LValue(TypedL))
 import Data.String
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
+import qualified Data.Text as T (length)
+import Data.Text.Read (decimal, double, Reader)
 
 -- | Check if a node satisfies a node constraint
 satisfies2 ::
@@ -23,7 +27,8 @@ satisfies2 ::
 satisfies2 NodeConstraint{..} node =
   optSatisfies (nodeSatisfiesKinds node) nodeKind &&
   optSatisfies (nodeSatisfiesDataType node) dataType  &&
-  optSatisfies (nodeSatisfiesValues node) values
+  optSatisfies (nodeSatisfiesValues node) values &&
+  nodeSatisfiesFacets node xsFacets
 
 
 
@@ -73,6 +78,40 @@ nodeSatisfiesValues :: Node -> [ValueSetValue] -> Bool
 nodeSatisfiesValues = any . nodeSatisfiesValue
 
 
+nodeSatisfiesFacets :: Node -> [XsFacet] -> Bool
+nodeSatisfiesFacets = all . nodeSatisfiesFacet
+
+nodeSatisfiesFacet :: Node -> XsFacet -> Bool
+nodeSatisfiesFacet node (XsStringFacet strFacet) = nodeSatisfiesStringFacet node strFacet
+nodeSatisfiesFacet node (XsNumericFacet numFacet) = nodeSatisfiesNumericFacet node numFacet
+
+nodeSatisfiesStringFacet :: Node -> StringFacet -> Bool
+nodeSatisfiesStringFacet _ _ = False
+
+nodeSatisfiesNumericFacet :: Node -> NumericFacet -> Bool
+nodeSatisfiesNumericFacet node (MinInclusive _ lit) = compareLiteral (<= lit) node
+nodeSatisfiesNumericFacet node (MinExclusive _ lit) = compareLiteral (< lit) node
+nodeSatisfiesNumericFacet node (MaxInclusive _ lit) = compareLiteral (>= lit) node
+nodeSatisfiesNumericFacet node (MaxExclusive _ lit) = compareLiteral (> lit) node
+nodeSatisfiesNumericFacet (LNode (TypedL v _)) (TotalDigits _ n) = T.length v == n
+nodeSatisfiesNumericFacet _ (FractionDigits _ _)   = False -- TODO
+nodeSatisfiesNumericFacet _    _                   = False
+
+
+numericLiteral :: Node -> Maybe NumericLiteral
+numericLiteral (LNode (TypedL value t)) = getUriType t >>= toLiteral where
+  toLiteral XsdInteger = NumericInt <$> readTextWith decimal value
+  toLiteral XsdDouble  = NumericDouble <$> readTextWith double value
+  toLiteral XsdDecimal = NumericDecimal <$> readTextWith double value
+  toLiteral _          = Nothing
+
+readTextWith :: Reader a -> Text -> Maybe a
+readTextWith reader text = case reader text of
+  Left _ -> Nothing
+  Right (res, _) -> Just res
+
+compareLiteral :: (NumericLiteral -> Bool) -> Node -> Bool
+compareLiteral p n = fromMaybe False (p <$> numericLiteral n)
 
 -- | Checks if an optional value satisfies a predicate. If the input doesn't
 --   have a value, returns True

@@ -12,12 +12,14 @@ import Shexkell.Data.ShEx
 import Shexkell.Data.Common
 import Shexkell.Data.ShapeExpr
 import Shexkell.Semantic.Datatype
-import Data.RDF (Node(..), LValue(TypedL))
+
+import Data.RDF (Node(..), LValue(TypedL, PlainL, PlainLL))
 import Data.String
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T (length)
 import Data.Text.Read (decimal, double, Reader)
+import Text.Regex.XMLSchema.Generic (match)
 
 -- | Check if a node satisfies a node constraint
 satisfies2 ::
@@ -31,6 +33,9 @@ satisfies2 NodeConstraint{..} node =
   nodeSatisfiesFacets node xsFacets
 
 
+----------------------------------------------------------------------
+-- * Node kind
+----------------------------------------------------------------------
 
 
 -- | For a node n and constraint value v, nodeSatisfies(n, v) if:
@@ -52,6 +57,12 @@ nodeSatisfiesKind _ _ = False
 nodeSatisfiesKinds :: Node -> [NodeKind] -> Bool
 nodeSatisfiesKinds = all . nodeSatisfiesKind
 
+
+----------------------------------------------------------------------
+-- * Node datatype
+----------------------------------------------------------------------
+
+
 -- | For a node n and constraint value v, nodeSatisfies(n, v) if n is an Literal
 -- with the datatype v and, if v is in the set of
 -- <https://www.w3.org/TR/sparql11-query/#operandDataTypes SPARQL operand data types><https://shexspec.github.io/spec/#bib-sparql11-query [sparql11-query]>,
@@ -60,6 +71,12 @@ nodeSatisfiesKinds = all . nodeSatisfiesKind
 nodeSatisfiesDataType :: Node -> IRI -> Bool
 nodeSatisfiesDataType (LNode (TypedL _ uri)) iri = uri == fromString iri
 nodeSatisfiesDataType _  _                       = False
+
+
+----------------------------------------------------------------------
+-- * Node value
+----------------------------------------------------------------------
+
 
 -- | For a node n and constraint value v, nodeSatisfies(n, v) if n matches some valueSetValue vsv in v. A term matches a valueSetValue if:
 --
@@ -78,6 +95,10 @@ nodeSatisfiesValues :: Node -> [ValueSetValue] -> Bool
 nodeSatisfiesValues = any . nodeSatisfiesValue
 
 
+----------------------------------------------------------------------
+-- * Xs facets
+----------------------------------------------------------------------
+
 nodeSatisfiesFacets :: Node -> [XsFacet] -> Bool
 nodeSatisfiesFacets = all . nodeSatisfiesFacet
 
@@ -86,7 +107,25 @@ nodeSatisfiesFacet node (XsStringFacet strFacet) = nodeSatisfiesStringFacet node
 nodeSatisfiesFacet node (XsNumericFacet numFacet) = nodeSatisfiesNumericFacet node numFacet
 
 nodeSatisfiesStringFacet :: Node -> StringFacet -> Bool
-nodeSatisfiesStringFacet _ _ = False
+nodeSatisfiesStringFacet node (LitStringFacet "length" n)    = (== n) `satisfiesLength` node
+nodeSatisfiesStringFacet node (LitStringFacet "minlength" n) = (>= n) `satisfiesLength` node
+nodeSatisfiesStringFacet node (LitStringFacet "maxlength" n) = (<= n) `satisfiesLength` node
+
+nodeSatisfiesStringFacet node (PatternStringFacet _ patt) =
+  maybe False (`match` fromString patt) (nodeLex node)
+
+nodeSatisfiesStringFacet _    _                           = False
+
+nodeLex :: Node -> Maybe Text
+nodeLex (UNode iri)              = Just iri
+nodeLex (BNode text)             = Just text
+nodeLex (LNode (PlainL text))    = Just text
+nodeLex (LNode (PlainLL text _)) = Just text
+nodeLex (LNode (TypedL text _))  = Just text
+nodeLex _                        = Nothing
+
+satisfiesLength :: (Int -> Bool) -> Node -> Bool
+satisfiesLength f node = maybe False (f . T.length) (nodeLex node)
 
 nodeSatisfiesNumericFacet :: Node -> NumericFacet -> Bool
 nodeSatisfiesNumericFacet node (MinInclusive _ lit) = compareLiteral (<= lit) node
@@ -111,7 +150,10 @@ readTextWith reader text = case reader text of
   Right (res, _) -> Just res
 
 compareLiteral :: (NumericLiteral -> Bool) -> Node -> Bool
-compareLiteral p n = fromMaybe False (p <$> numericLiteral n)
+compareLiteral p = maybe False p . numericLiteral
+
+
+
 
 -- | Checks if an optional value satisfies a predicate. If the input doesn't
 --   have a value, returns True
@@ -119,4 +161,4 @@ optSatisfies ::
     (a -> Bool) -- ^ Predicate
  -> Maybe a     -- ^ Input
  -> Bool
-optSatisfies predicate input = fromMaybe True (predicate <$> input)
+optSatisfies = maybe True

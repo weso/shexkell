@@ -10,7 +10,7 @@ import Shexkell.Data.ShapeExpr
 import Shexkell.Data.TripleExpr
 
 import qualified Data.Map as Map
-import Control.DeepSeq (NFData, rnf)
+
 
 data Schema = Schema {
     prefixes  :: Maybe PrefixMapping
@@ -88,45 +88,3 @@ triplMax EachOf{..} = cardMax
 triplMax OneOf{..}  = cardMax
 triplMax TripleConstraint{..} = cardMax
 triplMax _ = Nothing
-
-instance NFData ShapeExpr where
-  rnf NodeConstraint{..} =
-    rnf dataType `seq`
-    rnf xsFacets `seq`
-    rnf values
-  rnf Shape{..} =
-    rnf virtual `seq`
-    rnf closed `seq`
-    rnf extra `seq`
-    rnf expression `seq`
-    rnf inherit `seq`
-    rnf semActs
-  rnf (ShapeOr lbl exprs) = rnf lbl `seq` rnf exprs
-  rnf (ShapeAnd lbl exprs) = rnf lbl `seq` rnf exprs
-  rnf (ShapeNot lbl expr) = rnf lbl `seq` rnf expr
-  rnf (ShapeRef lbl) = rnf lbl
-  rnf _ = ()
-
-instance NFData TripleExpr where
-  rnf EachOf{..} =
-    rnf expressions `seq`
-    rnf cardMin `seq`
-    rnf cardMax `seq`
-    rnf triplSemActs `seq`
-    rnf annotations
-  rnf OneOf{..} =
-    rnf expressions `seq`
-    rnf cardMin `seq`
-    rnf cardMax `seq`
-    rnf triplSemActs `seq`
-    rnf annotations
-  rnf TripleConstraint{..} =
-    rnf inverse `seq`
-    rnf negated `seq`
-    rnf predicate `seq`
-    rnf valueExpr `seq`
-    rnf cardMin `seq`
-    rnf cardMax `seq`
-    rnf triplSemActs `seq`
-    rnf annotations
-  rnf (Inclusion lbl) = rnf lbl

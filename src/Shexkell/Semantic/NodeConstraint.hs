@@ -3,9 +3,6 @@
 module Shexkell.Semantic.NodeConstraint
   (
     satisfies2
-  , nodeSatisfiesKind
-  , nodeSatisfiesDataType
-  , nodeSatisfiesValue
   ) where
 
 import Shexkell.Data.ShEx
@@ -21,22 +18,31 @@ import qualified Data.Text as T (length)
 import Data.Text.Read (decimal, double, Reader)
 import Text.Regex.XMLSchema.Generic (match)
 
+
 -- | Check if a node satisfies a node constraint
 satisfies2 ::
      ShapeExpr -- ^ Node constraint
   -> Node      -- ^ Node
   -> Bool
-satisfies2 NodeConstraint{..} node =
-  optSatisfies (nodeSatisfiesKinds node) nodeKind &&
-  optSatisfies (nodeSatisfiesDataType node) dataType  &&
-  optSatisfies (nodeSatisfiesValues node) values &&
-  nodeSatisfiesFacets node xsFacets
+satisfies2 = flip satisfiesConstraint
+
+
+
+class NConstraint a where
+  satisfiesConstraint :: Node -> a -> Bool
+
+
+instance NConstraint ShapeExpr where
+  satisfiesConstraint node NodeConstraint{..} =
+    optSatisfies (all $ satisfiesConstraint node) nodeKind &&
+    optSatisfies (nodeSatisfiesDataType node) dataType  &&
+    optSatisfies (any $ satisfiesConstraint node) values &&
+    all (satisfiesConstraint node) xsFacets   
 
 
 ----------------------------------------------------------------------
 -- * Node kind
 ----------------------------------------------------------------------
-
 
 -- | For a node n and constraint value v, nodeSatisfies(n, v) if:
 --
@@ -44,18 +50,15 @@ satisfies2 NodeConstraint{..} node =
 --    * v = "bnode" and n is a blank node.
 --    * v = "literal" and n is a Literal.
 --    * v = "nonliteral" and n is an IRI or blank node.
-nodeSatisfiesKind :: Node -> NodeKind -> Bool
-nodeSatisfiesKind (UNode _) IRIKind = True
-nodeSatisfiesKind (BNode _) BNodeKind = True
-nodeSatisfiesKind (LNode _) LiteralKind = True
+instance NConstraint NodeKind where
+  satisfiesConstraint (UNode _) IRIKind = True
+  satisfiesConstraint (BNode _) BNodeKind = True
+  satisfiesConstraint (LNode _) LiteralKind = True
 
-nodeSatisfiesKind (UNode _) NonLiteralKind = True
-nodeSatisfiesKind (BNode _) NonLiteralKind = True
+  satisfiesConstraint (UNode _) NonLiteralKind = True
+  satisfiesConstraint (BNode _) NonLiteralKind = True
 
-nodeSatisfiesKind _ _ = False
-
-nodeSatisfiesKinds :: Node -> [NodeKind] -> Bool
-nodeSatisfiesKinds = all . nodeSatisfiesKind
+  satisfiesConstraint _ _ = False
 
 
 ----------------------------------------------------------------------
@@ -77,44 +80,47 @@ nodeSatisfiesDataType _  _                       = False
 -- * Node value
 ----------------------------------------------------------------------
 
-
 -- | For a node n and constraint value v, nodeSatisfies(n, v) if n matches some valueSetValue vsv in v. A term matches a valueSetValue if:
 --
 --    * vsv is an objectValue and n = vsv.
 --    * vsv is a Stem with stem st and nodeIn(n, st).
 --    * vsv is a StemRange with stem st and exclusions excls and nodeIn(n, st) and there is no x in excls such that nodeIn(n, excl).
 --    * vsv is a Wildcard with exclusions excls and there is no x in excls such that nodeIn(n, excl).
-nodeSatisfiesValue :: Node -> ValueSetValue -> Bool
-nodeSatisfiesValue node (ObjectValue oValue) = nodeSatisfiesOValue node oValue
-nodeSatisfiesValue (UNode uri) (Stem iri)    = uri == fromString iri
+instance NConstraint ValueSetValue where
+  satisfiesConstraint node (ObjectValue oValue) = satisfiesConstraint node oValue
+  satisfiesConstraint (UNode uri) (Stem iri)    = uri == fromString iri 
 
-nodeSatisfiesOValue :: Node -> ObjectValue -> Bool
-nodeSatisfiesOValue (UNode uri) (IRIValue iri) = uri == fromString iri
-
-nodeSatisfiesValues :: Node -> [ValueSetValue] -> Bool
-nodeSatisfiesValues = any . nodeSatisfiesValue
+instance NConstraint ObjectValue where
+  satisfiesConstraint (UNode uri) (IRIValue iri) = uri == fromString iri
 
 
 ----------------------------------------------------------------------
 -- * Xs facets
 ----------------------------------------------------------------------
 
-nodeSatisfiesFacets :: Node -> [XsFacet] -> Bool
-nodeSatisfiesFacets = all . nodeSatisfiesFacet
+instance NConstraint XsFacet where
+  satisfiesConstraint node (XsStringFacet strFacet) = satisfiesConstraint node strFacet
+  satisfiesConstraint node (XsNumericFacet numFacet) = satisfiesConstraint node numFacet
 
-nodeSatisfiesFacet :: Node -> XsFacet -> Bool
-nodeSatisfiesFacet node (XsStringFacet strFacet) = nodeSatisfiesStringFacet node strFacet
-nodeSatisfiesFacet node (XsNumericFacet numFacet) = nodeSatisfiesNumericFacet node numFacet
+instance NConstraint StringFacet where
+  satisfiesConstraint node (LitStringFacet "length" n)    = (== n) `satisfiesLength` node
+  satisfiesConstraint node (LitStringFacet "minlength" n) = (>= n) `satisfiesLength` node
+  satisfiesConstraint node (LitStringFacet "maxlength" n) = (<= n) `satisfiesLength` node
 
-nodeSatisfiesStringFacet :: Node -> StringFacet -> Bool
-nodeSatisfiesStringFacet node (LitStringFacet "length" n)    = (== n) `satisfiesLength` node
-nodeSatisfiesStringFacet node (LitStringFacet "minlength" n) = (>= n) `satisfiesLength` node
-nodeSatisfiesStringFacet node (LitStringFacet "maxlength" n) = (<= n) `satisfiesLength` node
+  satisfiesConstraint node (PatternStringFacet _ patt) =
+    maybe False (`match` fromString patt) (nodeLex node)
 
-nodeSatisfiesStringFacet node (PatternStringFacet _ patt) =
-  maybe False (`match` fromString patt) (nodeLex node)
+  satisfiesConstraint node _                              = False
 
-nodeSatisfiesStringFacet _    _                           = False
+instance NConstraint NumericFacet where
+  satisfiesConstraint node (MinInclusive _ lit) = compareLiteral (<= lit) node
+  satisfiesConstraint node (MinExclusive _ lit) = compareLiteral (< lit) node
+  satisfiesConstraint node (MaxInclusive _ lit) = compareLiteral (>= lit) node
+  satisfiesConstraint node (MaxExclusive _ lit) = compareLiteral (> lit) node
+  satisfiesConstraint (LNode (TypedL v _)) (TotalDigits _ n) = T.length v == n
+  satisfiesConstraint _ (FractionDigits _ _)   = False -- TODO
+  satisfiesConstraint _    _                   = False 
+
 
 nodeLex :: Node -> Maybe Text
 nodeLex (UNode iri)              = Just iri
@@ -126,16 +132,6 @@ nodeLex _                        = Nothing
 
 satisfiesLength :: (Int -> Bool) -> Node -> Bool
 satisfiesLength f node = maybe False (f . T.length) (nodeLex node)
-
-nodeSatisfiesNumericFacet :: Node -> NumericFacet -> Bool
-nodeSatisfiesNumericFacet node (MinInclusive _ lit) = compareLiteral (<= lit) node
-nodeSatisfiesNumericFacet node (MinExclusive _ lit) = compareLiteral (< lit) node
-nodeSatisfiesNumericFacet node (MaxInclusive _ lit) = compareLiteral (>= lit) node
-nodeSatisfiesNumericFacet node (MaxExclusive _ lit) = compareLiteral (> lit) node
-nodeSatisfiesNumericFacet (LNode (TypedL v _)) (TotalDigits _ n) = T.length v == n
-nodeSatisfiesNumericFacet _ (FractionDigits _ _)   = False -- TODO
-nodeSatisfiesNumericFacet _    _                   = False
-
 
 numericLiteral :: Node -> Maybe NumericLiteral
 numericLiteral (LNode (TypedL value t)) = getUriType t >>= toLiteral where

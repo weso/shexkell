@@ -5,21 +5,22 @@ module Shexkell.Semantic.Validation where
 
 import Shexkell.Control.Validation
 import Shexkell.Data.ShEx
-import Shexkell.Semantic.Shape
 import Shexkell.Semantic.NodeConstraint (satisfies2)
 import Shexkell.Semantic.Neighbourhood
+import Shexkell.Semantic.Partition
 
 import Data.RDF
 
 import Data.Composition
 import Data.String
 import Data.Maybe
-import Data.List (partition, find)
+import Data.List (find)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import Control.Monad.Reader
 import Control.Monad.State
+
 
 satisfies :: Rdf graph =>
      Schema
@@ -40,6 +41,9 @@ notSatisfies :: Rdf graph =>
   -> Bool
 notSatisfies = not .::. satisfies
 
+----------------
+-- satisfiesM --
+----------------
 
 satisfiesM :: (
     Rdf gr
@@ -58,13 +62,24 @@ satisfiesM node (ShapeAnd _ exprs) = allM (satisfiesM node) exprs
 satisfiesM node (ShapeNot _ expr) = not <$> satisfiesM node expr
 
 satisfiesM node Shape{..} = do
+  -- Get the graph
   gr <- reader graph
-  m <- get
-  let (matched, remainder) = fromMaybe ([], neigh gr node) ((\expr -> partition (match expr m) (neigh gr node)) <$> expression)
-  let outs = Set.fromList remainder `Set.intersection` Set.fromList (arcsOut gr node)
-  let matchables = fromMaybe Set.empty ((\expr -> Set.filter (match expr m) outs) <$> expression)
+
+  -- If there's a expression, find the partition that matches it
+  part <- maybe (return Nothing) (\expr ->
+    partitionM (`matches` expr) (Set.fromList $ neigh gr node)) expression
+
+  let (matched, remainder) = fromMaybe (Set.empty, Set.fromList $ neigh gr node) part
+  let outs = remainder `Set.intersection` Set.fromList (arcsOut gr node)
+  let matchables = maybe Set.empty (\expr -> Set.filter (containsPredicate expr) outs) expression
   let unmatchables = outs `Set.difference` matchables
+
+  sm <- case expression of
+    Just expr -> not <$> anyM (`singleMatch` expr) (Set.toList matchables)
+    Nothing   -> return False
+
   return False
+
 
 satisfiesM node (ShapeRef label) = do
   schShapes <- reader $ shapes . schema
@@ -74,8 +89,48 @@ satisfiesM node (ShapeRef label) = do
     _             -> return False
 
 
+containsPredicate :: TripleExpr -> Triple -> Bool
+containsPredicate TripleConstraint{..} (Triple _ (UNode iri) _) = iri == fromString predicate
+containsPredicate _                    _              = False
+
+
 anyM :: Monad m => (a -> m Bool) -> [a] -> m Bool
 anyM p = fmap or . mapM p
 
 allM :: Monad m => (a -> m Bool) -> [a] -> m Bool
 allM p = fmap and . mapM p
+
+-------------
+-- matches --
+-------------
+
+matches :: (
+    Rdf gr
+  , MonadState ShapeMap m
+  , MonadReader (ValidationContext gr) m
+  ) =>
+     Set.Set Triple
+  -> TripleExpr
+  -> m Bool
+matches triples expr
+  | Set.size triples == 1 = head (Set.elems triples) `singleMatch` expr
+  | otherwise = return False
+
+singleMatch :: (
+    Rdf gr
+  , MonadReader (ValidationContext gr) m
+  , MonadState ShapeMap m
+  ) =>
+     Triple
+  -> TripleExpr
+  -> m Bool
+singleMatch (Triple s (UNode iri) o) TripleConstraint{..} = do
+  let inv = fromMaybe False inverse
+  gr <- reader graph
+  let value = if inv then s else o
+  let getArcs = if inv then arcsIn else arcsOut
+  let arcs = getArcs gr value
+
+  case valueExpr of
+    Nothing -> return $ iri == fromString predicate
+    Just expr -> satisfiesM value expr

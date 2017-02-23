@@ -21,6 +21,7 @@ library
                      , Shexkell.Data.TripleExpr
                      , Shexkell.Control.Validation
                      , Shexkell.Control.DeepSeq
+                     , Shexkell.Semantic.Partition
                      , Shexkell.Semantic.Validation
                      , Shexkell.Semantic.NodeConstraint
                      , Shexkell.Semantic.Shape
@@ -36,7 +37,6 @@ library
                      , mtl >= 2.2.1
                      , text >= 1.2.2.1
                      , hxt-regex-xmlschema >= 9.2.0.3
-                     , monad-par >= 0.3.4.8
   default-language:    Haskell2010
 
 executable Shexkell-exe

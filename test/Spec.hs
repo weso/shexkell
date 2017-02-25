@@ -1,4 +1,4 @@
-import Shexkell.Semantic.NeighbourhoodTest
+import Shexkell.SemanticTests
 
 import Test.HUnit
 
@@ -6,4 +6,4 @@ import Control.Monad
 
 
 main :: IO ()
-main = void $ runTestTT neighbourhoodTests
+main = void $ runTestTT semanticTests

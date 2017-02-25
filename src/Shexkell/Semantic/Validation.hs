@@ -4,6 +4,7 @@
 module Shexkell.Semantic.Validation where
 
 import Shexkell.Control.Validation
+import Shexkell.Data.Common
 import Shexkell.Data.ShEx
 import Shexkell.Semantic.NodeConstraint (satisfies2)
 import Shexkell.Semantic.Neighbourhood
@@ -76,9 +77,10 @@ satisfiesM node Shape{..} = do
 
   sm <- case expression of
     Just expr -> not <$> anyM (`singleMatch` expr) (Set.toList matchables)
-    Nothing   -> return False
+    Nothing   -> return True
 
-  return False
+  return $ fromMaybe True (allM (inExtra extra . predicateOf) (Set.toList matchables))
+    && (maybe True not closed || Set.null unmatchables)
 
 
 satisfiesM node (ShapeRef label) = do
@@ -89,15 +91,20 @@ satisfiesM node (ShapeRef label) = do
     _             -> return False
 
 
+inExtra :: Maybe [IRI] -> Node -> Maybe Bool
+inExtra extra (UNode iri) = elem iri . map fromString <$> extra
+inExtra _     _           = Just False
+
+
 containsPredicate :: TripleExpr -> Triple -> Bool
 containsPredicate TripleConstraint{..} (Triple _ (UNode iri) _) = iri == fromString predicate
 containsPredicate _                    _              = False
 
 
-anyM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+anyM :: (Monad m, Traversable t) => (a -> m Bool) -> t a -> m Bool
 anyM p = fmap or . mapM p
 
-allM :: Monad m => (a -> m Bool) -> [a] -> m Bool
+allM :: (Monad m, Traversable t) => (a -> m Bool) -> t a -> m Bool
 allM p = fmap and . mapM p
 
 -------------
@@ -124,13 +131,15 @@ singleMatch :: (
      Triple
   -> TripleExpr
   -> m Bool
-singleMatch (Triple s (UNode iri) o) TripleConstraint{..} = do
+singleMatch t@(Triple s (UNode iri) o) TripleConstraint{..} = do
   let inv = fromMaybe False inverse
   gr <- reader graph
   let value = if inv then s else o
   let getArcs = if inv then arcsIn else arcsOut
   let arcs = getArcs gr value
 
-  case valueExpr of
+  valueMatches <- case valueExpr of
     Nothing -> return $ iri == fromString predicate
     Just expr -> satisfiesM value expr
+
+  return $ valueMatches && t `elem` arcs

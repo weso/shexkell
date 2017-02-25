@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Shexkell.Semantic.NeighbourhoodTest
+module Shexkell.SemanticTests.NeighbourhoodTest
   (
     neighbourhoodTests
   ) where

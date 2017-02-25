@@ -50,11 +50,14 @@ executable Shexkell-exe
 test-suite Shexkell-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
-  other-modules:       Shexkell.Semantic.NeighbourhoodTest
+  other-modules:       Shexkell.SemanticTests.NeighbourhoodTest
+                     , Shexkell.SemanticTests.PartitionTest
+                     , Shexkell.SemanticTests
   main-is:             Spec.hs
   build-depends:       base
                      , Shexkell
                      , rdf4h >= 3.0.1
+                     , containers >= 0.5.7.1
                      , HUnit >= 1.5.0.0
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010

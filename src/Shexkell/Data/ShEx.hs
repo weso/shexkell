@@ -13,12 +13,12 @@ import qualified Data.Map as Map
 
 
 data Schema = Schema {
-    prefixes  :: Maybe PrefixMapping
+    prefixes  :: Maybe [PrefixMapping]
   , base      :: Maybe IRI
   , startAct  :: Maybe [SemAct]
   , start     :: Maybe ShapeExpr
   , shapes    :: Maybe [ShapeExpr]
-}
+} deriving (Show)
 
 data ShapeExpr = NodeConstraint {
     shapeId  :: Maybe ShapeLabel
@@ -39,6 +39,7 @@ data ShapeExpr = NodeConstraint {
   | ShapeNot (Maybe ShapeLabel) ShapeExpr
   | ShapeRef ShapeLabel
   | ShapeExternal (Maybe ShapeLabel)
+  deriving Show
 
 data TripleExpr = EachOf {
     expressions  :: [TripleExpr]
@@ -62,9 +63,11 @@ data TripleExpr = EachOf {
   , triplSemActs :: Maybe [SemAct]
   , annotations :: Maybe [Annotation]
 } | Inclusion ShapeLabel
+  deriving Show
 
 
 newtype ShapeMap = ShapeMap { shapeMap :: Map.Map Node ShapeExpr }
+  deriving Show
 
 
 shexId :: ShapeExpr -> Maybe ShapeLabel
@@ -88,3 +91,17 @@ triplMax EachOf{..} = cardMax
 triplMax OneOf{..}  = cardMax
 triplMax TripleConstraint{..} = cardMax
 triplMax _ = Nothing
+
+empty :: ShapeExpr
+empty = Shape Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+
+isEmpty :: ShapeExpr -> Bool
+isEmpty (Shape Nothing Nothing Nothing Nothing Nothing Nothing Nothing) = True
+isEmpty _                                                               = False
+
+setLabel :: ShapeLabel -> ShapeExpr -> ShapeExpr
+setLabel lbl NodeConstraint{..} = NodeConstraint (Just lbl) nodeKind dataType xsFacets values
+setLabel lbl Shape{..} = Shape (Just lbl) virtual closed extra expression inherit semActs
+setLabel lbl (ShapeOr _ shapes) = ShapeOr (Just lbl) shapes
+setLabel lbl (ShapeAnd _ shapes) = ShapeAnd (Just lbl) shapes
+setLabel lbl (ShapeNot _ shape) = ShapeNot (Just lbl) shape

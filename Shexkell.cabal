@@ -27,6 +27,11 @@ library
                      , Shexkell.Semantic.Shape
                      , Shexkell.Semantic.Neighbourhood
                      , Shexkell.Semantic.Datatype
+
+                     , Shexkell.Text.Compact.ShexParser
+                     , Shexkell.Text.Compact.NodeConstraint
+                     , Shexkell.Text.Compact.Common
+
                      , Shexkell
   build-depends:       base >= 4.7 && < 5
                      , parsec

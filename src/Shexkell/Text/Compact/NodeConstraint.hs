@@ -25,9 +25,9 @@ literalKind = do
 
 nonLiteralKind :: Parser ShapeExpr
 nonLiteralKind = do
-  kind <- (IRIKind <$ string "IRI") <|>
-          (BNodeKind <$ string "BNODE") <|>
-          (NonLiteralKind <$ string "NONLITERAL")
+  kind <- (IRIKind <$ keyword "IRI") <|>
+          (BNodeKind <$ keyword "BNODE") <|>
+          (NonLiteralKind <$ keyword "NONLITERAL")
   facets <- map XsStringFacet <$> many stringFacet
   return $ NodeConstraint Nothing (Just [kind]) Nothing facets Nothing
 
@@ -81,7 +81,8 @@ stringLength = string "LENGTH" <|>
 patternStringFacet :: Parser StringFacet
 patternStringFacet = do
   strPat <- string "PATTERN" <* spaces
-  pat    <- between (char '"') (char '"') (many $ noneOf "\n")
+  pat    <- char '\"' >> manyTill (noneOf "\"") (char '\"')
+  spaces
   return $ PatternStringFacet strPat pat
 
 numericFacet :: Parser NumericFacet

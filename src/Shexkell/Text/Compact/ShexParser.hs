@@ -16,11 +16,24 @@ import Data.RDF.Namespace (PrefixMapping(..))
 import Data.String (fromString)
 import Data.Maybe (isJust, fromMaybe)
 import Data.Either
+import Data.Foldable (foldl')
 
 import Text.ParserCombinators.Parsec
 
 import Debug.Trace
 import Control.Monad.State (get)
+
+data Directive = Base IRI | Prefix PrefixMapping
+
+prefixMappings :: [Directive] -> [PrefixMapping]
+prefixMappings = foldl' (\ps d -> case d of
+  Prefix pm -> pm:ps
+  _         -> ps) []
+
+filterBases :: [Directive] -> [IRI]
+filterBases = foldl' (\ bs d -> case d of
+  Base i -> i:bs
+  _      -> bs) []
 
 ----------------------------------------
 -- * Schema
@@ -28,19 +41,26 @@ import Control.Monad.State (get)
 
 shexDoc :: Parser Schema
 shexDoc = do
-  dir <- directives
+  dir <- many directive
   st <- notStartAction
+  statements <- many statement
   eof
-  let prefixMappings = if null $ rights dir then Nothing else Just $ rights dir
-  let bases = if null $ lefts dir then Nothing else Just $ lefts dir
+
+  let pMappings = prefixMappings dir ++ prefixMappings (lefts statements)
+  let bases = filterBases dir ++ filterBases (lefts statements)
+  let shapeExprs = rights statements
 
   return Schema {
-      prefixes = prefixMappings
-    , base = Nothing
+      prefixes = Just pMappings
+    , base = if null bases then Nothing else Just $ head bases
     , startAct = Nothing
     , start = Just st
-    , shapes = Nothing
+    , shapes = Just shapeExprs
   }
+
+statement :: Parser (Either Directive ShapeExpr)
+statement = (Left <$> directive) <|> (Right <$> notStartAction)
+
 
 notStartAction :: Parser ShapeExpr
 notStartAction = parseStart <|> shexDecl
@@ -51,18 +71,18 @@ shexDecl = do
   expr <- parseShapeExpr
   return $ setLabel lbl expr
 
-directives :: Parser [Either IRI PrefixMapping]
-directives = many ((Left <$> baseDecl) <|> (Right <$> prefixDecl))
+directive :: Parser Directive
+directive = (Base <$> baseDecl) <|> (Prefix <$> prefixDecl)
 
 parseStart :: Parser ShapeExpr
-parseStart = string "start" >> spaces >> char '=' >> spaces >> parseShapeExpr
+parseStart = keyword "start" >> symbol '=' >> parseShapeExpr
 
 baseDecl :: Parser IRI
-baseDecl = string "BASE" >> iri
+baseDecl = keyword "BASE" >> iri
 
 prefixDecl :: Parser PrefixMapping
 prefixDecl = do
-  string "PREFIX" >> spaces
+  keyword "PREFIX" >> spaces
   pname <- pnameNs <* spaces
   iriref  <- iri
   return $ PrefixMapping (fromString pname, fromString iriref)
@@ -82,7 +102,7 @@ shapeAnd = compositeShape shapeNot "AND" (ShapeAnd Nothing)
 
 shapeNot :: Parser ShapeExpr
 shapeNot = do
-  isNot <- isJust <$> optionMaybe (string "NOT" <* spaces)
+  isNot <- isJust <$> optionMaybe (keyword "NOT" <* spaces)
   shape <- shapeAtom
   return $ if isNot then ShapeNot Nothing shape else shape
 
@@ -90,8 +110,8 @@ shapeAtom :: Parser ShapeExpr
 shapeAtom =
     withOpt nodeConstraint shapeOrRef (ShapeAnd Nothing) <|>
     shapeOrRef <|>
-    between (char '(') (char ')') parseShapeExpr <|>
-    (empty <$ (char '.' >> spaces))
+    between (symbol '(') (symbol ')') parseShapeExpr <|>
+    (empty <$ symbol '.')
 
 shapeOrRef :: Parser ShapeExpr
 shapeOrRef = shapeDefinition <|>
@@ -100,7 +120,7 @@ shapeOrRef = shapeDefinition <|>
 shapeDefinition :: Parser ShapeExpr
 shapeDefinition = do
   eoc <- many extraOrClosed
-  expr <- between (char '{' >> spaces) (char '}' >> spaces) (optionMaybe tripleExpr)
+  expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
   -- annotation
   let closed = not $ null (rights eoc)
   let extras = mconcat $ lefts eoc
@@ -108,8 +128,8 @@ shapeDefinition = do
   return $ Shape Nothing Nothing (Just closed) (Just extras) expr Nothing Nothing
 
 extraOrClosed :: Parser (Either [IRI] Bool)
-extraOrClosed = (Right True <$ (string "CLOSED" >> spaces)) <|>
-                Left <$> (string "EXTRA" >> spaces >> many1 iri)
+extraOrClosed = (Right True <$ keyword "CLOSED") <|>
+                Left <$> (keyword "EXTRA" >> many1 iri)
 
 inlineShapeExpr :: Parser ShapeExpr
 inlineShapeExpr = inlineShapeOr
@@ -122,7 +142,7 @@ inlineShapeAnd = compositeShape inlineShapeNot "AND" (ShapeAnd Nothing)
 
 inlineShapeNot :: Parser ShapeExpr
 inlineShapeNot = do
-  isNot <- isJust <$> optionMaybe (string "NOT" >> spaces)
+  isNot <- isJust <$> optionMaybe (keyword "NOT" >> spaces)
   sh <- inlineShapeAtom
   return $ if isNot then ShapeNot Nothing sh else sh
 
@@ -139,7 +159,7 @@ inlineShapeOrRef = inlineShapeDefinition <|>
 inlineShapeDefinition :: Parser ShapeExpr
 inlineShapeDefinition = do
   eoc <- many extraOrClosed
-  expr <- between (char '{' >> spaces) (char '}' >> spaces) (optionMaybe tripleExpr)
+  expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
   let closed = not $ null (rights eoc)
   let extras = mconcat $ lefts eoc
 
@@ -162,9 +182,9 @@ compositeShape ::
   -> String
   -> ([ShapeExpr] -> ShapeExpr)
   -> Parser ShapeExpr
-compositeShape leaf keyword constructor = do
+compositeShape leaf word constructor = do
   sh <- leaf
-  shs <- many $ string keyword >> spaces >> leaf
+  shs <- many $ keyword word >> spaces >> leaf
   return $ case shs of
     [] -> sh
     _  -> constructor (sh:shs)
@@ -184,12 +204,12 @@ groupTripleExpr :: Parser TripleExpr
 groupTripleExpr = multiElementGroup <|> singleElementGroup
 
 innerTripleExpr :: Parser TripleExpr
-innerTripleExpr = multiElementGroup <|> multiElementOneOf
+innerTripleExpr = multiElementOneOf <|> multiElementGroup
 
 multiElementOneOf :: Parser TripleExpr
 multiElementOneOf = do
   left <- groupTripleExpr
-  rights <- many (char '|' >> groupTripleExpr)
+  rights <- many (symbol '|' >> groupTripleExpr)
   return $  case rights of
     [] -> left
     _  -> OneOf (left:rights) Nothing Nothing Nothing Nothing
@@ -237,12 +257,12 @@ cardinality = (Nothing, Just Star) <$ symbol '*' <|>
 
 repeatRange :: Parser (Maybe Int, Maybe Max)
 repeatRange = do
-  char '{'
+  symbol '{'
   min <- read <$> many1 digit
   max <- optionMaybe $ do
     char ','
-    (Star <$ char '*') <|> (IntMax . read <$> many1 digit)
-  char '}'
+    (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit)
+  symbol '}'
   return (Just min, max)
 
 

@@ -19,7 +19,7 @@ pnameLn :: Parser IRI
 pnameLn = do
   pre <- pnameNs
   local <- many1 alphaNum <* spaces
-  return (pre ++ local)
+  return (pre ++ (':':local))
 
 pnameNs :: Parser String
 pnameNs = many1 alphaNum <* char ':'
@@ -27,3 +27,6 @@ pnameNs = many1 alphaNum <* char ':'
 
 symbol :: Char -> Parser Char
 symbol sym = char sym <* spaces
+
+keyword :: String -> Parser String
+keyword str = string str <* spaces

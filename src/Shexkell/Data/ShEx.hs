@@ -105,3 +105,10 @@ setLabel lbl Shape{..} = Shape (Just lbl) virtual closed extra expression inheri
 setLabel lbl (ShapeOr _ shapes) = ShapeOr (Just lbl) shapes
 setLabel lbl (ShapeAnd _ shapes) = ShapeAnd (Just lbl) shapes
 setLabel lbl (ShapeNot _ shape) = ShapeNot (Just lbl) shape
+
+withoutCardinality :: TripleExpr -> TripleExpr
+withoutCardinality expr@EachOf{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr@OneOf{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr@TripleConstraint{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr = expr
+

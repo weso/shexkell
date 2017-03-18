@@ -6,12 +6,14 @@ module Shexkell.Semantic.Validation where
 import Shexkell.Control.Validation
 import Shexkell.Data.Common
 import Shexkell.Data.ShEx
+import Shexkell.Data.TripleExpr
 import Shexkell.Semantic.NodeConstraint (satisfies2)
 import Shexkell.Semantic.Neighbourhood
 import Shexkell.Semantic.Partition
 
 import Data.RDF
 
+import Data.Foldable (asum)
 import Data.Composition
 import Data.String
 import Data.Maybe
@@ -119,7 +121,25 @@ matches :: (
      Set.Set Triple
   -> TripleExpr
   -> m Bool
-matches triples expr
+matches triples tripleExpr
+  | isJust (cardMin tripleExpr) || isJust (cardMax tripleExpr) = let
+    fromMin Nothing = 0
+    fromMin (Just n) = n
+    fromMax Nothing = length triples
+    fromMax (Just Star) = length triples
+    fromMax (Just (IntMax n)) = n
+  in
+    isJust . asum <$> mapM
+      (partitionN (allM (`matches` withoutCardinality tripleExpr)) triples)
+      [fromMin (cardMin tripleExpr)..fromMax (cardMax tripleExpr)]
+    
+
+matches triples OneOf{..} = anyM (matches triples) expressions
+
+matches triples EachOf{..} =
+  isJust <$> partitionN (fmap and . zipWithM (flip matches) expressions) triples (length expressions)
+
+matches triples expr@TripleConstraint{}
   | Set.size triples == 1 = head (Set.elems triples) `singleMatch` expr
   | otherwise = return False
 

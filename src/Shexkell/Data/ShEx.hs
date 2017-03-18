@@ -88,3 +88,9 @@ triplMax EachOf{..} = cardMax
 triplMax OneOf{..}  = cardMax
 triplMax TripleConstraint{..} = cardMax
 triplMax _ = Nothing
+
+withoutCardinality :: TripleExpr -> TripleExpr
+withoutCardinality expr@EachOf{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr@OneOf{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr@TripleConstraint{} = expr { cardMin = Nothing, cardMax = Nothing }
+withoutCardinality expr = expr

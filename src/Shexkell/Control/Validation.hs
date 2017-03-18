@@ -3,7 +3,6 @@
 
 module Shexkell.Control.Validation where
 
-import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 

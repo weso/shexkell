@@ -3,12 +3,14 @@
 module Shexkell.Semantic.Partition (
     partition
   , partitionM
+  , partitionN
 ) where
 
 import Control.Monad.Identity
 
 import qualified Data.Set as Set
-import Data.Foldable (asum)
+import Data.Foldable (asum, toList)
+import qualified Data.Sequence as Seq
 
 import Prelude hiding (pred)
 
@@ -36,7 +38,7 @@ findPartition :: (Monad m, Ord a) =>
      (Set.Set a -> m Bool)
   -> (Set.Set a, Set.Set a)
   -> m (Maybe (Set.Set a, Set.Set a))
-findPartition p current@(left, right) = p left >>= checkPartition where
+findPartition p current@(left, _) = p left >>= checkPartition where
   checkPartition True  = return $ Just current
   checkPartition False = asum <$> mapM (findPartition p) (Set.toList $ expand current)
 
@@ -44,3 +46,33 @@ findPartition p current@(left, right) = p left >>= checkPartition where
 expand :: Ord a => (Set.Set a, Set.Set a) -> Set.Set (Set.Set a, Set.Set a)
 expand (left, right) = Set.map swap right
   where swap element = (element `Set.insert` left, element `Set.delete` right)
+
+
+partitionN :: (Ord a, Monad m) =>
+     ([Set.Set a] -> m Bool)
+  -> Set.Set a
+  -> Int
+  -> m (Maybe [Set.Set a])
+partitionN pred set size = partitionMany pred (Set.toList set) (map (const Set.empty) [1..size])  
+
+
+partitionMany :: (Ord a, Monad m) =>
+     ([Set.Set a] -> m Bool)     -- ^ Predicate
+  -> [a]                         -- ^ Next elements
+  -> [Set.Set a]                 -- ^ Current state
+  -> m (Maybe [Set.Set a])       -- ^ Partition that satisfies the predicate
+partitionMany pred (x:xs) st = pred st >>= checkPartition where
+  checkPartition True  = return $ Just st
+  checkPartition False = asum <$> mapM (partitionMany pred xs) (mapdate (Set.insert x) (square st))
+
+partitionMany _ [] _ = return Nothing
+
+
+square :: [a] -> [[a]]
+square xs = map (const xs) xs
+
+mapdate :: 
+     (a -> a)
+  -> [[a]]
+  -> [[a]]
+mapdate f xs = zipWith (\r i -> toList $ Seq.adjust f i (Seq.fromList r)) xs [0..length xs]

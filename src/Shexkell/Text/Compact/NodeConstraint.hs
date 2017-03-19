@@ -19,7 +19,7 @@ nodeConstraint =
 
 literalKind :: Parser ShapeExpr
 literalKind = do
-  string "LITERAL" >> spaces
+  keyword "LITERAL"
   facets <- many xsFacet
   return $ NodeConstraint Nothing (Just [LiteralKind]) Nothing facets Nothing
 
@@ -34,13 +34,12 @@ nonLiteralKind = do
 parseDataType :: Parser ShapeExpr
 parseDataType = do
   dt <- iri
-  spaces
   facets <- many xsFacet
   return $ NodeConstraint Nothing Nothing (Just dt) facets Nothing
 
 valueSet :: Parser ShapeExpr
 valueSet = do
-  vs <- between (char '[') (char ']') (many valueSetValue)
+  vs <- between (symbol '[') (symbol ']') (many valueSetValue)
   facets <- many xsFacet
   return $ NodeConstraint Nothing Nothing Nothing facets (Just vs)
 
@@ -55,7 +54,7 @@ iriRange = (do
     Nothing -> ObjectValue (IRIValue i)
     Just [] -> Stem i
     Just ex -> StemRange (IRIStem i) (Just ex)) <|>
-  StemRange Wildcard . Just <$> (symbol '.' >> many1 exclusion)
+               StemRange Wildcard . Just <$> (symbol '.' >> many1 exclusion)
 
 exclusion :: Parser ValueSetValue
 exclusion = Stem <$> (symbol '-' *> iri <* symbol '~')
@@ -69,18 +68,17 @@ stringFacet = try stringLengthFacet <|> patternStringFacet
 stringLengthFacet :: Parser StringFacet
 stringLengthFacet = do
   strLen <- stringLength
-  len    <- read <$> many1 digit
-  spaces
+  len    <- read <$> many1 digit <* spaces
   return $ LitStringFacet strLen len
 
 stringLength :: Parser String
-stringLength = string "LENGTH" <|>
-               try (string "MAXLENGTH") <|>
-                   string "MINLENGTH"
+stringLength = keyword "LENGTH" <|>
+               try (keyword "MAXLENGTH") <|>
+                   keyword "MINLENGTH"
 
 patternStringFacet :: Parser StringFacet
 patternStringFacet = do
-  strPat <- string "PATTERN" <* spaces
+  strPat <- keyword "PATTERN"
   pat    <- char '\"' >> manyTill (noneOf "\"") (char '\"')
   spaces
   return $ PatternStringFacet strPat pat
@@ -89,11 +87,11 @@ numericFacet :: Parser NumericFacet
 numericFacet = numericRange <*> numericLiteral
 
 numericRange :: Parser (NumericLiteral -> NumericFacet)
-numericRange = try (MinInclusive <$> string "MININCLUSIVE") <|>
-                   (MinExclusive <$> string "MINEXCLUSIVE") <|>
-                   (MaxInclusive <$> string "MAXINCLUSIVE") <|>
-                   (MaxExclusive <$> string "MAXEXCLUSIVE")
+numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
+                   (MinExclusive <$> keyword "MINEXCLUSIVE") <|>
+                   (MaxInclusive <$> keyword "MAXINCLUSIVE") <|>
+                   (MaxExclusive <$> keyword "MAXEXCLUSIVE")
 
 numericLiteral :: Parser NumericLiteral
-numericLiteral = try (NumericInt . read <$> many1 digit) <|>
-                     (NumericDouble . read <$> many1 digit) -- TODO
+numericLiteral = try (NumericInt . read <$> many1 digit <* spaces) <|>
+                     (NumericDouble . read <$> many1 digit <* spaces) -- TODO

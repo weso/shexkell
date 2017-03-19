@@ -21,7 +21,7 @@ import Data.Foldable (foldl')
 import Text.ParserCombinators.Parsec
 
 import Debug.Trace
-import Control.Monad.State (get)
+
 
 data Directive = Base IRI | Prefix PrefixMapping
 
@@ -184,7 +184,7 @@ compositeShape ::
   -> Parser ShapeExpr
 compositeShape leaf word constructor = do
   sh <- leaf
-  shs <- many $ keyword word >> spaces >> leaf
+  shs <- many $ keyword word >> leaf
   return $ case shs of
     [] -> sh
     _  -> constructor (sh:shs)
@@ -258,10 +258,10 @@ cardinality = (Nothing, Just Star) <$ symbol '*' <|>
 repeatRange :: Parser (Maybe Int, Maybe Max)
 repeatRange = do
   symbol '{'
-  min <- read <$> many1 digit
+  min <- read <$> many1 digit <* spaces
   max <- optionMaybe $ do
-    char ','
-    (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit)
+    symbol ','
+    (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit <* spaces)
   symbol '}'
   return (Just min, max)
 
@@ -279,6 +279,7 @@ bracketedTripleExpr = do
 include :: Parser TripleExpr
 include = Inclusion <$> (char '&' *> shapeLabel)
 
+-- | For debugging purposes
 traceState :: Parser ()
 traceState = do
   (State s _ _) <- getParserState

@@ -14,6 +14,12 @@ import Shexkell.Data.Common
 instance FromJSON ShapeLabel where
   parseJSON = withText "shape label" (return . IRILabel . T.unpack)
 
+instance FromJSON SemAct where
+  parseJSON = withObject "SemAct" $ \ o -> do
+    assertType "SemAct" o
+    name <- o .:  "name"
+    code <- o .:? "code"
+    return $ SemAct name code
 
 assertType :: String -> Object -> Parser ()
 assertType expectedType o = do

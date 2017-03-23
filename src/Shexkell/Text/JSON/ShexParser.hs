@@ -25,10 +25,10 @@ import Shexkell.Text.JSON.NodeConstraint
 instance FromJSON Schema where
   parseJSON = withObject "Schema" $ \o -> do
     prefixes <- parsePrefixes <$> o .:? "prefixes"
-    base     <- o .:? "iri"
+    base     <- o .:?  "iri"
     start    <- o .:?  "start"
-    shapes   <- o .:? "shapes"
-    let startAct = Nothing
+    shapes   <- o .:?  "shapes"
+    startAct <- o .:?  "startActs"
     return Schema{..}
 
 
@@ -89,9 +89,9 @@ parseShape o = do
   closed     <- o .:? "closed"
   extra      <- o .:? "extra"
   expression <- o .:? "expression"
+  semActs    <- o .:? "semActs"
   let virtual = Nothing
   let inherit = Nothing
-  let semActs = Nothing
 
   return Shape{..}
 

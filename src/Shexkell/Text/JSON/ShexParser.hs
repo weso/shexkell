@@ -6,8 +6,6 @@ module Shexkell.Text.JSON.ShexParser where
 import Data.Foldable (asum)
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import Control.Monad (unless)
-import Data.Scientific
 
 import Data.Aeson
 import Data.Aeson.Types
@@ -20,38 +18,45 @@ import Shexkell.Data.TripleExpr
 
 import Shexkell.Text.JSON.Common 
 import Shexkell.Text.JSON.NodeConstraint
+import Shexkell.Text.JSON.Control
 
 
 instance FromJSON Schema where
-  parseJSON = withObject "Schema" $ \o -> do
-    prefixes <- parsePrefixes <$> o .:? "prefixes"
-    base     <- o .:?  "iri"
-    start    <- o .:?  "start"
-    shapes   <- o .:?  "shapes"
-    startAct <- o .:?  "startActs"
+  parseJSON = withObject "Schema" $ parseObject $ do
+    prefixes <- parsePrefixes <$> valueOpt "prefixes"
+    base     <- valueOpt  "iri"
+    start    <- valueOpt  "start"
+    shapes   <- valueOpt  "shapes"
+    startAct <- valueOpt  "startActs"
     return Schema{..}
 
 
 instance FromJSON ShapeExpr where        
-  parseJSON = withObject "ShapeExpr" $ \o -> asum [
-        parseNodeConstraint o
-      , parseShapeOr o
-      , parseShapeAnd o
-      , parseShapeNot o
-      , parseShape o
+  parseJSON = withObject "ShapeExpr" $ parseObject $ asum [
+        parseNodeConstraint
+      , parseShapeOr
+      , parseShapeAnd
+      , parseShapeNot
+      , parseShape
     ]
 
 instance FromJSON TripleExpr where
-  parseJSON = withObject "triple expression" $ \ o -> asum [
-        parseEachOf o
-      , parseOneOf  o
-      , parseTripleConstraint o
+  parseJSON = withObject "triple expression" $ parseObject $ asum [
+      parseEachOf
+    , parseOneOf
+    , parseTripleConstraint
     ]
 
 instance FromJSON Max where
   parseJSON (String "unbounded") = return Star
   parseJSON num@(Number _)       = IntMax <$> parseJSON num       
   parseJSON _                    = fail "Expected integer or \"unbounded\""
+
+instance FromJSON Annotation where
+  parseJSON = withObject "Annotation" $ parseObject $ do
+    predicate <- valueOf "predicate"
+    obj       <- valueOf "object"
+    return $ Annotation predicate obj
 
 parsePrefixes :: Maybe (Map.Map T.Text T.Text) -> Maybe [PrefixMapping]
 parsePrefixes = fmap (map PrefixMapping . Map.toList)
@@ -62,34 +67,34 @@ parsePrefixes = fmap (map PrefixMapping . Map.toList)
 -------------------------------------------------
 
 
-parseShapeOr :: Object -> Parser ShapeExpr
-parseShapeOr o = do
-  assertType "ShapeOr" o
-  shapeId    <- o .:? "id"
-  shapeExprs <- o .: "shapeExprs"
+parseShapeOr :: ObjectParser ShapeExpr
+parseShapeOr = do
+  assertType "ShapeOr"
+  shapeId    <- valueOpt "id"
+  shapeExprs <- valueOf  "shapeExprs"
   return $ ShapeOr shapeId shapeExprs
     
-parseShapeAnd :: Object -> Parser ShapeExpr
-parseShapeAnd o = do
-  assertType "ShapeAnd" o
-  shapeId    <- o .:? "id"
-  shapeExprs <- o .: "shapeExprs"
+parseShapeAnd :: ObjectParser ShapeExpr
+parseShapeAnd = do
+  assertType "ShapeAnd"
+  shapeId    <- valueOpt "id"
+  shapeExprs <- valueOf  "shapeExprs"
   return $ ShapeAnd shapeId shapeExprs
 
-parseShapeNot :: Object -> Parser ShapeExpr
-parseShapeNot o = do
-  assertType "ShapeNot" o
-  shapeId <- o .:? "id"
-  ShapeNot shapeId <$> o .: "shapeExpr"
+parseShapeNot :: ObjectParser ShapeExpr
+parseShapeNot = do
+  assertType "ShapeNot"
+  shapeId <- valueOpt "id"
+  ShapeNot shapeId <$> valueOf "shapeExpr"
 
-parseShape :: Object -> Parser ShapeExpr
-parseShape o = do
-  assertType "Shape" o
-  shapeId    <- o .:? "id"
-  closed     <- o .:? "closed"
-  extra      <- o .:? "extra"
-  expression <- o .:? "expression"
-  semActs    <- o .:? "semActs"
+parseShape :: ObjectParser ShapeExpr
+parseShape = do
+  assertType "Shape"
+  shapeId    <- valueOpt "id"
+  closed     <- valueOpt "closed"
+  extra      <- valueOpt "extra"
+  expression <- valueOpt "expression"
+  semActs    <- valueOpt "semActs"
   let virtual = Nothing
   let inherit = Nothing
 
@@ -100,31 +105,36 @@ parseShape o = do
 -- * Triple Expression
 ------------------------------------------------------------
 
-parseEachOf :: Object -> Parser TripleExpr
-parseEachOf o = do
-  assertType "EachOf" o
-  expressions <- o .:  "expressions"
-  cardMin     <- o .:? "min"
-  cardMax     <- o .:? "max"
+
+parseTripleConstraint :: ObjectParser TripleExpr
+parseTripleConstraint = do
+  assertType "TripleConstraint"
+  inverse      <- valueOpt "inverse"
+  predicate    <- valueOf  "predicate"
+  valueExpr    <- valueOpt "valueExpr"
+  cardMin      <- valueOpt "min"
+  cardMax      <- valueOpt "max"
+  annotations  <- valueOpt "annotations"
+  triplSemActs <- valueOpt "semActs"
+  let negated = Nothing
+  return TripleConstraint{..}
+
+parseEachOf :: ObjectParser TripleExpr
+parseEachOf = do
+  assertType "EachOf" 
+  expressions  <- valueOf  "expressions"
+  cardMin      <- valueOpt "min"
+  cardMax      <- valueOpt "max"
+  annotations  <- valueOpt "annotations"
+  triplSemActs <- valueOpt "semActs"
   return EachOf{..}
 
-parseOneOf :: Object -> Parser TripleExpr
-parseOneOf o = do
-  assertType "OneOf" o
-  expressions <- o .:  "expressions"
-  cardMin     <- o .:? "min"
-  cardMax     <- o .:? "max"
+parseOneOf :: ObjectParser TripleExpr 
+parseOneOf = do
+  assertType "OneOf"
+  expressions  <- valueOf  "expressions"
+  cardMin      <- valueOpt "min"
+  cardMax      <- valueOpt "max"
+  triplSemActs <- valueOpt "semActs"
+  annotations  <- valueOpt "annotations"
   return OneOf{..}
-
-parseTripleConstraint :: Object -> Parser TripleExpr
-parseTripleConstraint o = do
-  assertType "TripleConstraint" o
-  inverse   <- o .:? "inverse"
-  predicate <- o .:  "predicate"
-  valueExpr <- o .:? "valueExpr"
-  cardMin   <- o .:? "min"
-  cardMax   <- o .:? "max"
-  let negated = Nothing
-  let triplSemActs = Nothing
-  let annotations = Nothing
-  return TripleConstraint{..}

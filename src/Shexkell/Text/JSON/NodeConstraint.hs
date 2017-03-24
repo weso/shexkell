@@ -16,16 +16,17 @@ import Shexkell.Data.ShEx
 import Shexkell.Data.ShapeExpr
 import Shexkell.Data.Common
 
+import Shexkell.Text.JSON.Control
 import Shexkell.Text.JSON.Common
 
-parseNodeConstraint :: Object -> Parser ShapeExpr
-parseNodeConstraint o = do
-  assertType "NodeConstraint" o
-  shapeId  <- o .:?  "id"
-  nodeKind <- o .:? "nodeKind"
-  dataType <- o .:? "dataType"
-  xsFacets <- fromMaybe [] <$> (o .:? "xsFacet")
-  values   <- o .:? "values"
+parseNodeConstraint :: ObjectParser ShapeExpr
+parseNodeConstraint = do
+  assertType "NodeConstraint"
+  shapeId  <- valueOpt  "id"
+  nodeKind <- valueOpt "nodeKind"
+  dataType <- valueOpt "dataType"
+  xsFacets <- fromMaybe [] <$> valueOpt "xsFacet"
+  values   <- valueOpt "values"
   return NodeConstraint{..}
 
 
@@ -39,9 +40,10 @@ instance FromJSON NodeKind where
 
   
 instance FromJSON XsFacet where
-  parseJSON = withObject "XsFacet" $ \ o -> 
-    (XsStringFacet  <$> parseStringFacet  o) <|> 
-    (XsNumericFacet <$> parseNumericFacet o)
+  parseJSON = withObject "XsFacet" $ parseObject $ asum [
+      XsStringFacet  <$> parseStringFacet
+    , XsNumericFacet <$> parseNumericFacet
+    ]
 
 
 instance FromJSON NumericLiteral where
@@ -55,13 +57,13 @@ instance FromJSON NumericLiteral where
 instance FromJSON ValueSetValue where
   parseJSON value = 
          ObjectValue <$> (parseJSON value :: Parser ObjectValue)
-     <|> withObject "Stem" (\ o -> do
-          assertType "Stem" o
-          Stem <$> o .: "stem") value
-     <|> withObject "StemRange" (\ o -> do
-           assertType "StemRange" o
-           stemValue  <- o .:  "stem"
-           exclusions <- o .:? "exclusions"
+     <|> withObject "Stem" (parseObject $ do
+          assertType "Stem"
+          Stem <$> valueOf "stem") value
+     <|> withObject "StemRange" (parseObject $ do
+           assertType "StemRange"
+           stemValue  <- valueOf  "stem"
+           exclusions <- valueOpt "exclusions"
            return $ StemRange stemValue exclusions) value
 
 
@@ -78,32 +80,32 @@ instance FromJSON StemValue where
   parseJSON text@(String _) = IRIStem <$> parseJSON text
 
 
-parseStringFacet :: Object -> Parser StringFacet
-parseStringFacet o = parseLitStringFacet o <|> parsePatternFacet o
+parseStringFacet :: ObjectParser StringFacet
+parseStringFacet = parseLitStringFacet <|> parsePatternFacet
 
-parseLitStringFacet :: Object -> Parser StringFacet
-parseLitStringFacet o =
+parseLitStringFacet :: ObjectParser StringFacet
+parseLitStringFacet =
   asum [
-      LitStringFacet "length"    <$> o .: "length"
-    , LitStringFacet "minlength" <$> o .: "minlength"
-    , LitStringFacet "maxlength" <$> o .: "maxlength"
+      LitStringFacet "length"    <$> valueOf "length"
+    , LitStringFacet "minlength" <$> valueOf "minlength"
+    , LitStringFacet "maxlength" <$> valueOf "maxlength"
     ]
 
-parsePatternFacet :: Object -> Parser StringFacet
-parsePatternFacet o = do
-  patt    <- o .: "pattern"
-  flags   <- o .: "flags"
+parsePatternFacet :: ObjectParser StringFacet
+parsePatternFacet = do
+  patt    <- valueOf "pattern"
+  flags   <- valueOf "flags"
   return $ PatternStringFacet patt flags
     
-parseNumericFacet :: Object -> Parser NumericFacet
-parseNumericFacet o = asum [
-    parseWithKey MaxExclusive   "maxexclusive"   o
-  , parseWithKey MaxInclusive   "maxinclusive"   o
-  , parseWithKey MinExclusive   "minexclusive"   o
-  , parseWithKey MinInclusive   "mininclusive"   o
-  , parseWithKey TotalDigits    "totaldigits"    o
-  , parseWithKey FractionDigits "fractiondigits" o 
+parseNumericFacet :: ObjectParser NumericFacet
+parseNumericFacet = asum [
+    parseWithKey MaxExclusive   "maxexclusive"
+  , parseWithKey MaxInclusive   "maxinclusive"
+  , parseWithKey MinExclusive   "minexclusive"
+  , parseWithKey MinInclusive   "mininclusive"
+  , parseWithKey TotalDigits    "totaldigits"
+  , parseWithKey FractionDigits "fractiondigits"
   ]
 
-parseWithKey :: FromJSON a => (String -> a -> b) -> String -> Object -> Parser b
-parseWithKey constr key obj = constr key <$> obj .: fromString key
+parseWithKey :: FromJSON a => (String -> a -> b) -> String -> ObjectParser b
+parseWithKey constr key = constr key <$> valueOf (fromString key)

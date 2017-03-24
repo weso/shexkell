@@ -35,6 +35,7 @@ library
                      , Shexkell.Text.JSON.ShexParser
                      , Shexkell.Text.JSON.NodeConstraint
                      , Shexkell.Text.JSON.Common
+                     , Shexkell.Text.JSON.Control
 
                      , Shexkell
   build-depends:       base >= 4.7 && < 5

@@ -9,6 +9,8 @@ import Shexkell.Data.Common
 import Shexkell.Data.ShapeExpr
 import Shexkell.Data.TripleExpr
 
+import Data.List (find)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 
 
@@ -111,4 +113,18 @@ withoutCardinality expr@EachOf{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr@OneOf{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr@TripleConstraint{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr = expr
+
+--  TODO Absolutize IDs at parsing
+findShapeByLabel :: ShapeLabel -> Schema -> Maybe ShapeExpr
+findShapeByLabel lbl Schema{..} = shapes >>= find (matchesId . shexId) where
+  matchesId queryId =
+    queryId == Just lbl ||
+      case lbl of
+        l@(IRILabel _) -> fromMaybe False $ do
+              b <- base
+              qId <- queryId
+              return $ modifyLabel (b ++) qId == l
+        _ -> False
+
+    
 

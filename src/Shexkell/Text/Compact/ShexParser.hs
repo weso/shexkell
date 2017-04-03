@@ -14,7 +14,7 @@ import Shexkell.Text.Compact.Common
 
 import Data.RDF.Namespace (PrefixMapping(..))
 import Data.String (fromString)
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (isJust, fromMaybe, listToMaybe)
 import Data.Either
 import Data.Foldable (foldl')
 
@@ -42,7 +42,7 @@ filterBases = foldl' (\ bs d -> case d of
 shexDoc :: Parser Schema
 shexDoc = do
   dir <- many directive
-  st <- notStartAction
+  st <- optionMaybe  notStartAction
   statements <- many statement
   eof
 
@@ -54,16 +54,16 @@ shexDoc = do
       prefixes = Just pMappings
     , base = if null bases then Nothing else Just $ head bases
     , startAct = Nothing
-    , start = Just st
+    , start = st
     , shapes = Just shapeExprs
   }
 
 statement :: Parser (Either Directive ShapeExpr)
-statement = (Left <$> directive) <|> (Right <$> notStartAction)
+statement = (Left <$> directive) <|> (Right <$> shexDecl)
 
 
 notStartAction :: Parser ShapeExpr
-notStartAction = parseStart <|> shexDecl
+notStartAction = parseStart-- <|> shexDecl
 
 shexDecl :: Parser ShapeExpr
 shexDecl = do
@@ -122,10 +122,10 @@ shapeDefinition = do
   eoc <- many extraOrClosed
   expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
   -- annotation
-  let closed = not $ null (rights eoc)
+  let closed = listToMaybe $ rights eoc
   let extras = mconcat $ lefts eoc
 
-  return $ Shape Nothing Nothing (Just closed) (Just extras) expr Nothing Nothing
+  return $ Shape Nothing Nothing closed (Just extras) expr Nothing Nothing
 
 extraOrClosed :: Parser (Either [IRI] Bool)
 extraOrClosed = (Right True <$ keyword "CLOSED") <|>

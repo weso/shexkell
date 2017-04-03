@@ -9,8 +9,11 @@ iri :: Parser IRI
 iri = prefixedName <|>
       between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri"
 
+bnode :: Parser String
+bnode = string "_:" >> many1 alphaNum <?> "bnode"   
+
 shapeLabel :: Parser ShapeLabel
-shapeLabel = IRILabel <$> iri
+shapeLabel = (IRILabel <$> iri) <|> (BNodeId <$> bnode)
 
 prefixedName :: Parser IRI
 prefixedName = try (pnameLn <|> pnameNs)

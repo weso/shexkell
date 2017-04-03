@@ -37,6 +37,8 @@ library
                      , Shexkell.Text.JSON.Common
                      , Shexkell.Text.JSON.Control
 
+                     , Shexkell.Text
+
                      , Shexkell
   build-depends:       base >= 4.7 && < 5
                      , parsec
@@ -66,12 +68,21 @@ test-suite Shexkell-test
   other-modules:       Shexkell.SemanticTests.NeighbourhoodTest
                      , Shexkell.SemanticTests.PartitionTest
                      , Shexkell.SemanticTests
+
+                     , Shexkell.TestSuite.Data.Types
+                     , Shexkell.TestSuite
   main-is:             Spec.hs
   build-depends:       base
                      , Shexkell
                      , rdf4h >= 3.0.1
                      , containers >= 0.5.7.1
+                     , bytestring >= 0.10.8.1
                      , HUnit >= 1.5.0.0
+                     , aeson
+                     , MissingH >= 1.4.0.1
+                     , either >= 4.4.1.1
+                     , mtl >= 2.2.1
+                     , text >= 1.2.2.1
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

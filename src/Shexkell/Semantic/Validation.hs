@@ -24,6 +24,8 @@ import qualified Data.Set as Set
 import Control.Monad.Reader
 import Control.Monad.State
 
+import Debug.Trace
+
 
 satisfies :: Rdf graph =>
      Schema
@@ -32,7 +34,7 @@ satisfies :: Rdf graph =>
   -> ShapeExpr
   -> Node
   -> Bool
-satisfies sch graph smap shex node =
+satisfies sch graph smap shex node = 
   runValidation (satisfiesM node shex) (ValidationContext graph sch) smap
 
 notSatisfies :: Rdf graph =>
@@ -76,19 +78,18 @@ satisfiesM node Shape{..} = do
   let outs = remainder `Set.intersection` Set.fromList (arcsOut gr node)
   let matchables = maybe Set.empty (\expr -> Set.filter (containsPredicate expr) outs) expression
   let unmatchables = outs `Set.difference` matchables
-
+  
   sm <- case expression of
     Just expr -> not <$> anyM (`singleMatch` expr) (Set.toList matchables)
     Nothing   -> return True
 
   return $ fromMaybe True (allM (inExtra extra . predicateOf) (Set.toList matchables))
-    && (maybe True not closed || Set.null unmatchables)
+    && (maybe True not closed || Set.null unmatchables) && sm
 
 
 satisfiesM node (ShapeRef label) = do
-  schShapes <- reader $ shapes . schema
-  let expr = schShapes >>= find ((== Just label) . shexId)
-  case expr of
+  sch <- reader schema
+  case findShapeByLabel label sch of
     Just justExpr -> satisfiesM node justExpr
     _             -> return False
 
@@ -154,12 +155,14 @@ singleMatch :: (
 singleMatch t@(Triple s (UNode iri) o) TripleConstraint{..} = do
   let inv = fromMaybe False inverse
   gr <- reader graph
+
   let value = if inv then s else o
   let getArcs = if inv then arcsIn else arcsOut
   let arcs = getArcs gr value
 
-  valueMatches <- case valueExpr of
-    Nothing -> return $ iri == fromString predicate
-    Just expr -> satisfiesM value expr
 
-  return $ valueMatches && t `elem` arcs
+  let predicateMatches = iri == fromString predicate
+
+  valueMatches <- maybe (return True) (satisfiesM value) valueExpr
+
+  return $ predicateMatches && valueMatches && t `elem` arcs 

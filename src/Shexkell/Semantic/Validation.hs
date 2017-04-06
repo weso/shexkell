@@ -24,8 +24,6 @@ import qualified Data.Set as Set
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Debug.Trace
-
 
 satisfies :: Rdf graph =>
      Schema
@@ -124,9 +122,9 @@ matches :: (
   -> m Bool
 matches triples tripleExpr
   | isJust (cardMin tripleExpr) || isJust (cardMax tripleExpr) = let
-    fromMin Nothing = 0
+    fromMin Nothing = 1
     fromMin (Just n) = n
-    fromMax Nothing = length triples
+    fromMax Nothing = 1
     fromMax (Just Star) = length triples
     fromMax (Just (IntMax n)) = n
   in

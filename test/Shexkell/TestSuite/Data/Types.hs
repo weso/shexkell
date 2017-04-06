@@ -6,6 +6,7 @@ module Shexkell.TestSuite.Data.Types where
 import Data.Aeson
 import Data.Text (unpack)
 
+
 import Prelude hiding (id)
 
 
@@ -27,7 +28,8 @@ data TestCase = TestCase {
   , schemaPath :: String
   , graphPath  :: String
   , shape      :: Maybe String
-  , focus      :: QueryNode
+  , focus      :: Maybe QueryNode
+  , testMap    :: Maybe String
   , expected   :: ExpectedResult
 }
 
@@ -38,6 +40,7 @@ newtype TestManifest = TestManifest {
 data QueryNode =
     QueryUNode String
   | QueryTypedLiteral String String
+  deriving (Eq, Ord)
 
 data ExpectedResult = ValidationTest | ValidationFailure
 
@@ -61,7 +64,8 @@ instance FromJSON TestCase where
     schemaPath <- action .: "schema"
     graphPath  <- action .: "data"
     shape      <- action .:? "shape"
-    focus      <- action .: "focus"
+    focus      <- action .:? "focus"
+    testMap    <- action .:? "map"
     return TestCase{..}
 
 instance FromJSON QueryNode where

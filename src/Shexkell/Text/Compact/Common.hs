@@ -1,35 +1,39 @@
 module Shexkell.Text.Compact.Common where
 
+import Shexkell.Text.Compact.Control
+
 import Shexkell.Data.Common
 
 import Text.ParserCombinators.Parsec
+import Text.Parsec (Parsec)
+
 import Debug.Trace
 
-iri :: Parser IRI
+iri :: ParserShex IRI
 iri = prefixedName <|>
-      between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri"
+      withBase (between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri")
 
-bnode :: Parser String
+bnode :: Parsec String u String
 bnode = string "_:" >> many1 alphaNum <?> "bnode"   
 
-shapeLabel :: Parser ShapeLabel
+shapeLabel :: ParserShex ShapeLabel
 shapeLabel = (IRILabel <$> iri) <|> (BNodeId <$> bnode)
 
-prefixedName :: Parser IRI
+prefixedName :: ParserShex IRI
 prefixedName = try (pnameLn <|> pnameNs)
 
-pnameLn :: Parser IRI
+pnameLn :: Parsec String u IRI
 pnameLn = do
   pre <- pnameNs
   local <- many1 alphaNum <* spaces
   return (pre ++ (':':local))
 
-pnameNs :: Parser String
+pnameNs :: Parsec String u String
 pnameNs = many1 alphaNum <* char ':'
 
 
-symbol :: Char -> Parser Char
+symbol :: Char -> Parsec String u Char
 symbol sym = char sym <* spaces
 
-keyword :: String -> Parser String
+keyword :: String -> Parsec String u String
 keyword str = string str <* spaces

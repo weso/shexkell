@@ -2,7 +2,8 @@ module Main where
 
 import System.Environment
 
-import Shexkell.Text.Compact.ShexParser (parse, shexDoc)
+import Shexkell.Text.Compact.ShexParser (shexDoc)
+import Shexkell.Text.Compact.Control
 
 import Data.Aeson hiding (parseJSON)
 import Data.String
@@ -10,7 +11,10 @@ import Shexkell.Data.ShEx
 import Shexkell.Text.JSON.ShexParser ()
 
 main :: IO ()
-main = do
+main = getArgs >>= re . head
+
+mainJSON :: IO ()
+mainJSON = do
     [path] <- getArgs
     parsed <- parseJSON path
     case parsed of
@@ -21,7 +25,7 @@ main = do
 re :: String -> IO ()
 re path = do
   contents <- readFile path
-  case parse shexDoc "Prueba" contents of
+  case parseShexC shexDoc "Prueba" contents of
       Left err -> print err
       Right success -> print success
 

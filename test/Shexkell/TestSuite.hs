@@ -7,6 +7,7 @@ import Data.Aeson
 import Data.RDF
 import Data.Either.Utils
 import Data.String
+import Data.Foldable (forM_)
 
 import Shexkell.TestSuite.Data.Types
 import qualified Test.HUnit as T
@@ -17,6 +18,7 @@ import qualified Data.Map as M
 import Prelude hiding (id)
 import Control.Applicative
 import Control.Monad.Trans.Either
+import Control.Monad.Trans.Maybe
 import Control.Monad.Trans
 
 import Shexkell.Text
@@ -43,38 +45,37 @@ loadTests conf@TestConfiguration{..} = do
 
 -- | Create a test from a test case of the manifest
 fromTestCase :: TestConfiguration -> TestCase -> T.Test
-fromTestCase TestConfiguration{..} TestCase{..} = T.TestCase $ testEither expected $ do
+fromTestCase TestConfiguration{..} tcase@TestCase{..} = T.TestCase $ testEither expected $ do
   -- Read the contents of the ShEx schema
   schemaFile <- lift $ readFile $ basePath ++ "/validation/" ++ schemaPath
+
   -- Parse the graph
   graph      <- lift (parseFile (TurtleParser Nothing Nothing) (basePath ++ "/validation/" ++ graphPath) :: IO (Either ParseFailure (RDF TList)))
+  gr         <- hoistEither $ setLeft ParseGraph graph
+
   -- Parse the schema
   schema     <- hoistEither $ setLeft ParseShex $ parseShex schemaFile CompactShexParser
-  -- Get the shape to validate from the test case
-  sh         <- case shape of
-    Just shId -> maybeToEither ShapeNotFound $ findShapeByLabel (IRILabel shId) schema
-    Nothing   -> maybeToEither NoShapeStart (start schema)
 
-  -- Get the node to validate from the test case and the loaded graph
-  gr <- hoistEither $ setLeft ParseGraph graph
-  node       <- hoistEither $ findNode (toNode focus) gr
+  -- Get the validations to perform
+  Just queryMap <- lift $ getValidationMap basePath tcase
+  -- Iterate through them
+  forM_ (M.toList queryMap) $ \(n, s) -> do
+    -- Get the shape to validate from the test case
+    sh   <- maybeToEither ShapeNotFound $ findShapeByLabel (IRILabel s) schema
+    node <- hoistEither $ findNode (toNode n) gr
 
-  -- Get the function to validate based on the test case
-  let validate = case expected of
-                ValidationTest -> satisfies
-                ValidationFailure -> notSatisfies
+    -- Get the function to validate based on the test case
+    let validate = case expected of
+                  ValidationTest -> satisfies
+                  ValidationFailure -> notSatisfies
 
-  -- Run the validation
-  lift $ T.assertBool "Unexpected validation result" $ validate schema gr (ShapeMap M.empty) sh node
-
-  return ()
+    -- Run the validation
+    lift $ T.assertBool ("Unexpected validation result at " ++ show id) $ validate schema gr (ShapeMap M.empty) sh node
 
 
 -- Find a node in the graph given its ID
 findNode :: Rdf gr => Node -> RDF gr -> Either TestSuiteException Node
-findNode node graph = case queryLeft <|> queryMid <|> queryRight of
-  Nothing -> Left NodeNotFound
-  Just n  -> Right n
+findNode node graph = maybeToEither NodeNotFound $ queryLeft <|> queryMid <|> queryRight
   where
     queryLeft = queryGraph pickLeft (Just node) Nothing Nothing
     queryMid  = queryGraph pickMid Nothing (Just node) Nothing
@@ -101,6 +102,38 @@ toNode :: QueryNode -> Node
 toNode (QueryUNode uri) = unode (fromString uri)
 toNode (QueryTypedLiteral value ty) = lnode $ typedL (fromString value) (fromString ty)
 
+
+--------------------------------------------
+-- * Validation map
+--------------------------------------------
+
+getValidationMap ::
+     String                               -- ^ Base path to search the file map
+  -> TestCase                             -- ^ Test case to get the map from
+  -> IO (Maybe (M.Map QueryNode String))
+getValidationMap basePath tcase@TestCase{..} = runMaybeT $
+  -- Try to get the map from the file if it's specified in the test case
+  (M.mapKeys QueryUNode <$> (getMapFromFile . ((basePath ++ "/validation/") ++) =<< MaybeT (return testMap))) <|>
+  -- Otherwise get it from the test case itself
+  getMapFromCase tcase
+
+-- | Reads the map file and parses it from JSON
+getMapFromFile :: String -> MaybeT IO (M.Map String String)
+getMapFromFile mapPath = do
+  mapFile <- lift $ B.readFile mapPath
+  MaybeT $ return $ decode mapFile
+
+-- | If the test case specifies a node and shape to validate, builds a map
+--   from it
+getMapFromCase :: TestCase -> MaybeT IO (M.Map QueryNode String)
+getMapFromCase TestCase{..} = do
+  sh <- MaybeT $ return shape
+  node <- MaybeT $ return focus
+  return $ M.singleton node sh 
+
+---------------------------------------------
+
+
 -- | Possible exceptions that may happen during the tests
 data TestSuiteException =
     NodeNotFound
@@ -112,7 +145,6 @@ data TestSuiteException =
 instance Show TestSuiteException where  
   show NodeNotFound = "Node not found"
   show ShapeNotFound = "Shape not found"
-  show NoShapeStart = "No shape specified in start"
   show ParseShex = "Error parsing shape expression"
   show ParseGraph = "Error parsing graph"
 

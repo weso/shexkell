@@ -9,6 +9,7 @@ import Shexkell.Data.ShEx
 import Shexkell.Data.Common
 import Shexkell.Data.TripleExpr
 
+import Shexkell.Text.Compact.Control
 import Shexkell.Text.Compact.NodeConstraint
 import Shexkell.Text.Compact.Common
 
@@ -39,7 +40,7 @@ filterBases = foldl' (\ bs d -> case d of
 -- * Schema
 ----------------------------------------
 
-shexDoc :: Parser Schema
+shexDoc :: ParserShex Schema
 shexDoc = do
   dir <- many directive
   st <- optionMaybe  notStartAction
@@ -58,29 +59,29 @@ shexDoc = do
     , shapes = Just shapeExprs
   }
 
-statement :: Parser (Either Directive ShapeExpr)
+statement :: ParserShex (Either Directive ShapeExpr)
 statement = (Left <$> directive) <|> (Right <$> shexDecl)
 
 
-notStartAction :: Parser ShapeExpr
+notStartAction :: ParserShex ShapeExpr
 notStartAction = parseStart-- <|> shexDecl
 
-shexDecl :: Parser ShapeExpr
+shexDecl :: ParserShex ShapeExpr
 shexDecl = do
   lbl <- shapeLabel
   expr <- parseShapeExpr
   return $ setLabel lbl expr
 
-directive :: Parser Directive
-directive = (Base <$> baseDecl) <|> (Prefix <$> prefixDecl)
+directive :: ParserShex Directive
+directive = (Base <$> (baseDecl >>= putBase)) <|> (Prefix <$> prefixDecl)
 
-parseStart :: Parser ShapeExpr
+parseStart :: ParserShex ShapeExpr
 parseStart = keyword "start" >> symbol '=' >> parseShapeExpr
 
-baseDecl :: Parser IRI
+baseDecl :: ParserShex IRI
 baseDecl = keyword "BASE" >> iri
 
-prefixDecl :: Parser PrefixMapping
+prefixDecl :: ParserShex PrefixMapping
 prefixDecl = do
   keyword "PREFIX" >> spaces
   pname <- pnameNs <* spaces
@@ -91,33 +92,33 @@ prefixDecl = do
 -- * Shape Expression
 -----------------------------------
 
-parseShapeExpr :: Parser ShapeExpr
+parseShapeExpr :: ParserShex ShapeExpr
 parseShapeExpr = shapeOr
 
-shapeOr :: Parser ShapeExpr
+shapeOr :: ParserShex ShapeExpr
 shapeOr = compositeShape shapeAnd "OR" (ShapeOr Nothing)
 
-shapeAnd :: Parser ShapeExpr
+shapeAnd :: ParserShex ShapeExpr
 shapeAnd = compositeShape shapeNot "AND" (ShapeAnd Nothing)
 
-shapeNot :: Parser ShapeExpr
+shapeNot :: ParserShex ShapeExpr
 shapeNot = do
   isNot <- isJust <$> optionMaybe (keyword "NOT" <* spaces)
   shape <- shapeAtom
   return $ if isNot then ShapeNot Nothing shape else shape
 
-shapeAtom :: Parser ShapeExpr
+shapeAtom :: ParserShex ShapeExpr
 shapeAtom =
     withOpt nodeConstraint shapeOrRef (ShapeAnd Nothing) <|>
     shapeOrRef <|>
     between (symbol '(') (symbol ')') parseShapeExpr <|>
     (empty <$ symbol '.')
 
-shapeOrRef :: Parser ShapeExpr
+shapeOrRef :: ParserShex ShapeExpr
 shapeOrRef = shapeDefinition <|>
              ShapeRef <$> (char '@' *> shapeLabel)
 
-shapeDefinition :: Parser ShapeExpr
+shapeDefinition :: ParserShex ShapeExpr
 shapeDefinition = do
   eoc <- many extraOrClosed
   expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
@@ -127,36 +128,36 @@ shapeDefinition = do
 
   return $ Shape Nothing Nothing closed (Just extras) expr Nothing Nothing
 
-extraOrClosed :: Parser (Either [IRI] Bool)
+extraOrClosed :: ParserShex (Either [IRI] Bool)
 extraOrClosed = (Right True <$ keyword "CLOSED") <|>
                 Left <$> (keyword "EXTRA" >> many1 iri)
 
-inlineShapeExpr :: Parser ShapeExpr
+inlineShapeExpr :: ParserShex ShapeExpr
 inlineShapeExpr = inlineShapeOr
 
-inlineShapeOr :: Parser ShapeExpr
+inlineShapeOr :: ParserShex ShapeExpr
 inlineShapeOr = compositeShape inlineShapeAnd "OR" (ShapeOr Nothing)
 
-inlineShapeAnd :: Parser ShapeExpr
+inlineShapeAnd :: ParserShex ShapeExpr
 inlineShapeAnd = compositeShape inlineShapeNot "AND" (ShapeAnd Nothing)
 
-inlineShapeNot :: Parser ShapeExpr
+inlineShapeNot :: ParserShex ShapeExpr
 inlineShapeNot = do
   isNot <- isJust <$> optionMaybe (keyword "NOT" >> spaces)
   sh <- inlineShapeAtom
   return $ if isNot then ShapeNot Nothing sh else sh
 
-inlineShapeAtom :: Parser ShapeExpr
+inlineShapeAtom :: ParserShex ShapeExpr
 inlineShapeAtom = withOpt nodeConstraint inlineShapeOrRef (ShapeAnd Nothing) <|>
                   withOpt inlineShapeOrRef nodeConstraint (ShapeAnd Nothing) <|>
                   between (symbol '(') (symbol ')') parseShapeExpr <|>
                   empty <$ (symbol '.' >> spaces)
 
-inlineShapeOrRef :: Parser ShapeExpr
+inlineShapeOrRef :: ParserShex ShapeExpr
 inlineShapeOrRef = inlineShapeDefinition <|>
                    ShapeRef <$> (char '@' *> shapeLabel)
 
-inlineShapeDefinition :: Parser ShapeExpr
+inlineShapeDefinition :: ParserShex ShapeExpr
 inlineShapeDefinition = do
   eoc <- many extraOrClosed
   expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
@@ -166,10 +167,10 @@ inlineShapeDefinition = do
   return $ Shape Nothing Nothing (Just closed) (Just extras) expr Nothing Nothing
 
 withOpt ::
-     Parser ShapeExpr
-  -> Parser ShapeExpr
+     ParserShex ShapeExpr
+  -> ParserShex ShapeExpr
   -> ([ShapeExpr] -> ShapeExpr)
-  -> Parser ShapeExpr
+  -> ParserShex ShapeExpr
 withOpt parseFirst parseOpt constructor = do
   first <- parseFirst
   opt   <- optionMaybe parseOpt
@@ -178,10 +179,10 @@ withOpt parseFirst parseOpt constructor = do
     Nothing   -> first
 
 compositeShape ::
-     Parser ShapeExpr
+     ParserShex ShapeExpr
   -> String
   -> ([ShapeExpr] -> ShapeExpr)
-  -> Parser ShapeExpr
+  -> ParserShex ShapeExpr
 compositeShape leaf word constructor = do
   sh <- leaf
   shs <- many $ keyword word >> leaf
@@ -194,19 +195,19 @@ compositeShape leaf word constructor = do
 -- * Triple Expression
 --------------------------------------
 
-tripleExpr :: Parser TripleExpr
+tripleExpr :: ParserShex TripleExpr
 tripleExpr = oneOfTripleExpr
 
-oneOfTripleExpr :: Parser TripleExpr
+oneOfTripleExpr :: ParserShex TripleExpr
 oneOfTripleExpr = groupTripleExpr <|> multiElementOneOf
 
-groupTripleExpr :: Parser TripleExpr
+groupTripleExpr :: ParserShex TripleExpr
 groupTripleExpr = multiElementGroup <|> singleElementGroup
 
-innerTripleExpr :: Parser TripleExpr
+innerTripleExpr :: ParserShex TripleExpr
 innerTripleExpr = multiElementOneOf <|> multiElementGroup
 
-multiElementOneOf :: Parser TripleExpr
+multiElementOneOf :: ParserShex TripleExpr
 multiElementOneOf = do
   left <- groupTripleExpr
   rights <- many (symbol '|' >> groupTripleExpr)
@@ -214,10 +215,10 @@ multiElementOneOf = do
     [] -> left
     _  -> OneOf (left:rights) Nothing Nothing Nothing Nothing
 
-singleElementGroup :: Parser TripleExpr
+singleElementGroup :: ParserShex TripleExpr
 singleElementGroup = unaryTripleExpr <* optional (symbol ';')
 
-multiElementGroup :: Parser TripleExpr
+multiElementGroup :: ParserShex TripleExpr
 multiElementGroup = do
   left <- unaryTripleExpr
   rights <- many (symbol ';' >> unaryTripleExpr)
@@ -226,11 +227,11 @@ multiElementGroup = do
     [] -> left
     _  -> EachOf (left:rights) Nothing Nothing Nothing Nothing
 
-unaryTripleExpr :: Parser TripleExpr
+unaryTripleExpr :: ParserShex TripleExpr
 unaryTripleExpr = (tripleConstraint <|> bracketedTripleExpr) <|>
                   include
 
-tripleConstraint :: Parser TripleExpr
+tripleConstraint :: ParserShex TripleExpr
 tripleConstraint = do
   inv <- senseFlag
   p   <- parsePredicate
@@ -243,19 +244,19 @@ tripleConstraint = do
 
   return $ TripleConstraint (Just inv) Nothing p valueE min max Nothing Nothing
 
-senseFlag :: Parser Bool
+senseFlag :: ParserShex Bool
 senseFlag = isJust <$> optionMaybe (symbol '^' <* spaces)
 
-parsePredicate :: Parser IRI
+parsePredicate :: ParserShex IRI
 parsePredicate = iri
 
-cardinality :: Parser (Maybe Int, Maybe Max)
+cardinality :: ParserShex (Maybe Int, Maybe Max)
 cardinality = (Nothing, Just Star) <$ symbol '*' <|>
               (Just 1, Just Star) <$ symbol '+' <|>
               (Nothing, Just $ IntMax 1) <$ symbol '?' <|>
               repeatRange
 
-repeatRange :: Parser (Maybe Int, Maybe Max)
+repeatRange :: ParserShex (Maybe Int, Maybe Max)
 repeatRange = do
   symbol '{'
   min <- read <$> many1 digit <* spaces
@@ -266,7 +267,7 @@ repeatRange = do
   return (Just min, max)
 
 
-bracketedTripleExpr :: Parser TripleExpr
+bracketedTripleExpr :: ParserShex TripleExpr
 bracketedTripleExpr = do
   expr <- between (symbol '(') (symbol ')') innerTripleExpr
   (min, max) <- fromMaybe (Nothing, Nothing) <$> optionMaybe cardinality
@@ -276,11 +277,11 @@ bracketedTripleExpr = do
     TripleConstraint{..} -> TripleConstraint inverse negated predicate valueExpr min max triplSemActs annotations
 
 
-include :: Parser TripleExpr
+include :: ParserShex TripleExpr
 include = Inclusion <$> (char '&' *> shapeLabel)
 
 -- | For debugging purposes
-traceState :: Parser ()
+traceState :: ParserShex ()
 traceState = do
   (State s _ _) <- getParserState
   traceShowM s

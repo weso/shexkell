@@ -86,6 +86,7 @@ prefixDecl = do
   keyword "PREFIX" >> spaces
   pname <- pnameNs <* spaces
   iriref  <- iri
+  putPrefix pname iriref
   return $ PrefixMapping (fromString pname, fromString iriref)
 
 -----------------------------------

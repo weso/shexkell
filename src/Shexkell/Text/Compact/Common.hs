@@ -22,11 +22,11 @@ shapeLabel = (IRILabel <$> iri) <|> (BNodeId <$> bnode)
 prefixedName :: ParserShex IRI
 prefixedName = try (pnameLn <|> pnameNs)
 
-pnameLn :: Parsec String u IRI
+pnameLn :: ParserShex IRI
 pnameLn = do
-  pre <- pnameNs
+  pre   <- pnameNs
   local <- many1 alphaNum <* spaces
-  return (pre ++ (':':local))
+  withPrefix pre local
 
 pnameNs :: Parsec String u String
 pnameNs = many1 alphaNum <* char ':'

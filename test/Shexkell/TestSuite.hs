@@ -27,6 +27,8 @@ import Shexkell.Data.Common
 
 import Shexkell.Semantic.Validation
 
+import Debug.Trace
+
 
 -- | Load the manifest file from the configuration and create the test to run
 loadTests :: TestConfiguration -> IO T.Test
@@ -61,7 +63,7 @@ fromTestCase TestConfiguration{..} tcase@TestCase{..} = T.TestCase $ testEither 
   -- Iterate through them
   forM_ (M.toList queryMap) $ \(n, s) -> do
     -- Get the shape to validate from the test case
-    sh   <- maybeToEither ShapeNotFound $ findShapeByLabel (IRILabel s) schema
+    sh   <- maybeToEither ShapeNotFound $ findShapeByLabel (toShapeLabel s) schema
     node <- hoistEither $ findNode (toNode n) gr
 
     -- Get the function to validate based on the test case
@@ -102,6 +104,9 @@ toNode :: QueryNode -> Node
 toNode (QueryUNode uri) = unode (fromString uri)
 toNode (QueryTypedLiteral value ty) = lnode $ typedL (fromString value) (fromString ty)
 
+toShapeLabel :: String -> ShapeLabel
+toShapeLabel ('_':(':':bnodeLbl)) = BNodeId bnodeLbl
+toShapeLabel lbl = IRILabel lbl
 
 --------------------------------------------
 -- * Validation map
@@ -113,7 +118,7 @@ getValidationMap ::
   -> IO (Maybe (M.Map QueryNode String))
 getValidationMap basePath tcase@TestCase{..} = runMaybeT $
   -- Try to get the map from the file if it's specified in the test case
-  (M.mapKeys QueryUNode <$> (getMapFromFile . ((basePath ++ "/validation/") ++) =<< MaybeT (return testMap))) <|>
+  (M.mapKeys QueryUNode <$> (getMapFromFile . ((basePath ++ "/validation/") ++) =<< maybeT testMap)) <|>
   -- Otherwise get it from the test case itself
   getMapFromCase tcase
 
@@ -121,15 +126,18 @@ getValidationMap basePath tcase@TestCase{..} = runMaybeT $
 getMapFromFile :: String -> MaybeT IO (M.Map String String)
 getMapFromFile mapPath = do
   mapFile <- lift $ B.readFile mapPath
-  MaybeT $ return $ decode mapFile
+  maybeT $ decode mapFile
 
 -- | If the test case specifies a node and shape to validate, builds a map
 --   from it
 getMapFromCase :: TestCase -> MaybeT IO (M.Map QueryNode String)
 getMapFromCase TestCase{..} = do
-  sh <- MaybeT $ return shape
-  node <- MaybeT $ return focus
+  sh <- maybeT shape
+  node <- maybeT focus
   return $ M.singleton node sh 
+
+maybeT :: Monad m => Maybe a -> MaybeT m a
+maybeT = MaybeT . return
 
 ---------------------------------------------
 

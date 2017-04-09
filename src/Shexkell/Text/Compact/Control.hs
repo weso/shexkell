@@ -13,13 +13,15 @@ type ParserShex a = Parsec String ParsingContext a
 
 data ParsingContext = ParsingContext {
     currentBase :: IRI
-  , prefixes    :: PrefixMappings
+  , prefixes    :: Maybe PrefixNamespace
 }
+
+data PrefixNamespace = PrefixMap PrefixMappings | SinglePrefix IRI
 
 
 -- | Parses a shape expression with compact syntax
 parseShexC :: ParserShex a -> SourceName -> String -> Either ParseError a
-parseShexC parser = runParser parser $ ParsingContext [] (PrefixMappings M.empty)
+parseShexC parser = runParser parser $ ParsingContext [] Nothing
 
 
 -- | Sets the current base
@@ -33,8 +35,13 @@ putPrefix ::
      String        -- ^ Prefix
   -> String        -- ^ IRI that corresponds the prefix
   -> ParserShex ()
-putPrefix prefix mapping = modifyState $ \ ctx@(ParsingContext _ (PrefixMappings pmap)) ->
-  ctx { prefixes = PrefixMappings (M.insert (pack prefix) (pack mapping) pmap) }
+putPrefix "" mapping = modifyState singlePrefix where
+  singlePrefix ctx@(ParsingContext _ _) = ctx { prefixes = Just $ SinglePrefix mapping }
+
+putPrefix prefix mapping = modifyState addPrefix where
+  addPrefix ctx@(ParsingContext _ Nothing) = ctx { prefixes = Just $ PrefixMap $ PrefixMappings $ M.singleton (pack prefix) (pack mapping) }
+  addPrefix ctx@(ParsingContext _ (Just (PrefixMap (PrefixMappings pmap)))) = ctx { prefixes = Just $ PrefixMap $ PrefixMappings (M.insert (pack prefix) (pack mapping) pmap) }
+
 
 -- | Given a parser that parses an IRI, uses the current base to absolutize
 --   that IRI
@@ -50,7 +57,11 @@ withBase p = do
 --   prefix from the parsing state and creates an absolute IRI
 withPrefix :: String -> String -> ParserShex IRI 
 withPrefix pre local = do
-  PrefixMappings pmap <- prefixes <$> getState
-  case M.lookup (pack pre) pmap of
-    Just prefix -> return $ unpack prefix ++ local
+  pns <- prefixes <$> getState
+  let fromNs = pns >>= \ pns' -> case pns' of
+        PrefixMap (PrefixMappings pmap) -> unpack <$> M.lookup (pack pre) pmap
+        SinglePrefix prefix -> return prefix 
+  
+  case fromNs of
+    Just prefix -> return $ prefix ++ local
     Nothing     -> fail "Prefix not found"

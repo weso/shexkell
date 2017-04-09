@@ -14,7 +14,7 @@ iri = prefixedName <|>
       withBase (between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri")
 
 bnode :: Parsec String u String
-bnode = string "_:" >> many1 alphaNum <?> "bnode"   
+bnode = string "_:" >> many1 alphaNum <* spaces <?> "bnode"   
 
 shapeLabel :: ParserShex ShapeLabel
 shapeLabel = (IRILabel <$> iri) <|> (BNodeId <$> bnode)
@@ -25,11 +25,11 @@ prefixedName = try (pnameLn <|> pnameNs)
 pnameLn :: ParserShex IRI
 pnameLn = do
   pre   <- pnameNs
-  local <- many1 alphaNum <* spaces
+  local <- many alphaNum <* spaces
   withPrefix pre local
 
 pnameNs :: Parsec String u String
-pnameNs = many1 alphaNum <* char ':'
+pnameNs = (many alphaNum <* char ':') <* spaces
 
 
 symbol :: Char -> Parsec String u Char

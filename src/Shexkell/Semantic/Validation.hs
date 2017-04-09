@@ -24,6 +24,8 @@ import qualified Data.Set as Set
 import Control.Monad.Reader
 import Control.Monad.State
 
+import Debug.Trace
+
 
 satisfies :: Rdf graph =>
      Schema
@@ -163,4 +165,4 @@ singleMatch t@(Triple s (UNode iri) o) TripleConstraint{..} = do
 
   valueMatches <- maybe (return True) (satisfiesM value) valueExpr
 
-  return $ predicateMatches && valueMatches && t `elem` arcs 
+  return $ predicateMatches && valueMatches && maybe True (const $ t `elem` arcs) inverse

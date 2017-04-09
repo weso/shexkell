@@ -83,8 +83,8 @@ baseDecl = keyword "BASE" >> iri
 
 prefixDecl :: ParserShex PrefixMapping
 prefixDecl = do
-  keyword "PREFIX" >> spaces
-  pname <- pnameNs <* spaces
+  keyword "PREFIX"
+  pname <- pnameNs 
   iriref  <- iri
   putPrefix pname iriref
   return $ PrefixMapping (fromString pname, fromString iriref)
@@ -144,7 +144,7 @@ inlineShapeAnd = compositeShape inlineShapeNot "AND" (ShapeAnd Nothing)
 
 inlineShapeNot :: ParserShex ShapeExpr
 inlineShapeNot = do
-  isNot <- isJust <$> optionMaybe (keyword "NOT" >> spaces)
+  isNot <- isJust <$> optionMaybe (keyword "NOT")
   sh <- inlineShapeAtom
   return $ if isNot then ShapeNot Nothing sh else sh
 
@@ -152,7 +152,7 @@ inlineShapeAtom :: ParserShex ShapeExpr
 inlineShapeAtom = withOpt nodeConstraint inlineShapeOrRef (ShapeAnd Nothing) <|>
                   withOpt inlineShapeOrRef nodeConstraint (ShapeAnd Nothing) <|>
                   between (symbol '(') (symbol ')') parseShapeExpr <|>
-                  empty <$ (symbol '.' >> spaces)
+                  empty <$ symbol '.'
 
 inlineShapeOrRef :: ParserShex ShapeExpr
 inlineShapeOrRef = inlineShapeDefinition <|>
@@ -222,7 +222,7 @@ singleElementGroup = unaryTripleExpr <* optional (symbol ';')
 multiElementGroup :: ParserShex TripleExpr
 multiElementGroup = do
   left <- unaryTripleExpr
-  rights <- many (symbol ';' >> unaryTripleExpr)
+  rights <- many (try $ symbol ';' >> unaryTripleExpr)
   optional $ symbol ';'
   return $ case rights of
     [] -> left
@@ -243,10 +243,10 @@ tripleConstraint = do
         | isEmpty value = Nothing
         | otherwise     = Just value
 
-  return $ TripleConstraint (Just inv) Nothing p valueE min max Nothing Nothing
+  return $ TripleConstraint (if inv then Just True else Nothing) Nothing p valueE min max Nothing Nothing
 
 senseFlag :: ParserShex Bool
-senseFlag = isJust <$> optionMaybe (symbol '^' <* spaces)
+senseFlag = isJust <$> optionMaybe (symbol '^')
 
 parsePredicate :: ParserShex IRI
 parsePredicate = iri

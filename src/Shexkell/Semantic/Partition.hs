@@ -4,6 +4,8 @@ module Shexkell.Semantic.Partition (
     partition
   , partitionM
   , partitionN
+  , mapdate
+  , square
 ) where
 
 import Control.Monad.Identity
@@ -13,6 +15,8 @@ import Data.Foldable (asum, toList)
 import qualified Data.Sequence as Seq
 
 import Prelude hiding (pred)
+
+import Debug.Trace
 
 
 -- | Find the partition of a set that matches a predicate. Uses 'partitionM' with
@@ -63,7 +67,7 @@ partitionMany :: (Ord a, Monad m) =>
   -> m (Maybe [Set.Set a])       -- ^ Partition that satisfies the predicate
 partitionMany pred (x:xs) st = pred st >>= checkPartition where
   checkPartition True  = return $ Just st
-  checkPartition False = asum <$> mapM (partitionMany pred xs) (mapdate (Set.insert x) (square st))
+  checkPartition False = asum <$> mapM (partitionMany pred xs) (mapdate (Set.insert x) (square st ++ [map (const Set.empty) st]))
 
 partitionMany _ [] _ = return Nothing
 

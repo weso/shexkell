@@ -8,6 +8,7 @@ import Data.Aeson
 import Shexkell.Text.JSON.ShexParser ()
 import Shexkell.Text.Compact.ShexParser
 import Shexkell.Text.Compact.Control
+import Shexkell.Text.Compact.PreParser
 
 
 class ShexParser a where
@@ -22,6 +23,9 @@ instance ShexParser JSONShexParser where
   parseShex str _ = eitherDecode $ fromString str
 
 instance ShexParser CompactShexParser where
-  parseShex str _ = case parseShexC shexDoc "Compact shex" str of
+  parseShex str _ = case p of
     Left err -> Left $ show err
     Right sch -> Right sch
+    
+    where p = parseShexC shexDoc "Compact shex" =<< parse preparse "Compact shex" str
+    

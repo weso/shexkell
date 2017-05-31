@@ -114,17 +114,9 @@ withoutCardinality expr@OneOf{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr@TripleConstraint{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr = expr
 
---  TODO Absolutize IDs at parsing
 findShapeByLabel :: ShapeLabel -> Schema -> Maybe ShapeExpr
 findShapeByLabel lbl Schema{..} = shapes >>= find (matchesId . shexId) where
-  matchesId queryId =
-    queryId == Just lbl ||
-      case lbl of
-        l@(IRILabel _) -> fromMaybe False $ do
-              b <- base
-              qId <- queryId
-              return $ modifyLabel (b ++) qId == l
-        _ -> False
+  matchesId shapeId = shapeId == Just lbl 
 
     
 

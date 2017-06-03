@@ -4,9 +4,10 @@ import Shexkell.Data.Common (IRI, ObjectValue)
 
 
 data Annotation = Annotation IRI ObjectValue
-  deriving Show
+  deriving (Show, Eq)
 
 data Max = Star | IntMax Int
+  deriving (Eq)
 
 instance Show Max where
   show Star = "*"

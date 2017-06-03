@@ -35,9 +35,6 @@ putPrefix ::
      String        -- ^ Prefix
   -> String        -- ^ IRI that corresponds the prefix
   -> ParserShex ()
-putPrefix "" mapping = modifyState singlePrefix where
-  singlePrefix ctx@(ParsingContext _ _) = ctx { prefixes = Just $ SinglePrefix mapping }
-
 putPrefix prefix mapping = modifyState addPrefix where
   addPrefix ctx@(ParsingContext _ Nothing) = ctx { prefixes = Just $ PrefixMap $ PrefixMappings $ M.singleton (pack prefix) (pack mapping) }
   addPrefix ctx@(ParsingContext _ (Just (PrefixMap (PrefixMappings pmap)))) = ctx { prefixes = Just $ PrefixMap $ PrefixMappings (M.insert (pack prefix) (pack mapping) pmap) }

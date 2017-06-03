@@ -12,7 +12,6 @@ import Shexkell.Semantic.Datatype
 
 import Data.RDF (Node(..), LValue(TypedL, PlainL, PlainLL))
 import Data.String
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T (length)
 import Data.Text.Read (decimal, double, Reader)
@@ -92,7 +91,12 @@ instance NConstraint ValueSetValue where
 
 instance NConstraint ObjectValue where
   satisfiesConstraint (UNode uri) (IRIValue iri) = uri == fromString iri
-
+  satisfiesConstraint (LNode (PlainL value)) (StringValue str) = fromString str == value
+  satisfiesConstraint (LNode (TypedL value t)) (DatatypeString value' t') =
+    value == fromString value' && t == fromString t'
+  satisfiesConstraint (LNode (PlainLL value lang)) (LangString value' lang') =
+    value == fromString value' && lang == fromString lang'
+  satisfiesConstraint _ _ = False
 
 ----------------------------------------------------------------------
 -- * Xs facets
@@ -101,7 +105,7 @@ instance NConstraint ObjectValue where
 instance NConstraint XsFacet where
   satisfiesConstraint node (XsStringFacet strFacet) = satisfiesConstraint node strFacet
   satisfiesConstraint node (XsNumericFacet numFacet) = satisfiesConstraint node numFacet
-
+  
 instance NConstraint StringFacet where
   satisfiesConstraint node (LitStringFacet "length" n)    = (== n) `satisfiesLength` node
   satisfiesConstraint node (LitStringFacet "minlength" n) = (>= n) `satisfiesLength` node

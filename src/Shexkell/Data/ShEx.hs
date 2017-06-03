@@ -2,7 +2,7 @@
 
 module Shexkell.Data.ShEx where
 
-import Data.RDF (Node)
+
 import Data.RDF.Namespace (PrefixMapping)
 
 import Shexkell.Data.Common
@@ -10,8 +10,6 @@ import Shexkell.Data.ShapeExpr
 import Shexkell.Data.TripleExpr
 
 import Data.List (find)
-import Data.Maybe (fromMaybe)
-import qualified Data.Map as Map
 
 
 data Schema = Schema {
@@ -41,7 +39,7 @@ data ShapeExpr = NodeConstraint {
   | ShapeNot (Maybe ShapeLabel) ShapeExpr
   | ShapeRef ShapeLabel
   | ShapeExternal (Maybe ShapeLabel)
-  deriving Show
+  deriving (Show, Eq)
 
 data TripleExpr = EachOf {
     expressions  :: [TripleExpr]
@@ -65,11 +63,7 @@ data TripleExpr = EachOf {
   , triplSemActs :: Maybe [SemAct]
   , annotations :: Maybe [Annotation]
 } | Inclusion ShapeLabel
-  deriving Show
-
-
-newtype ShapeMap = ShapeMap { shapeMap :: Map.Map Node ShapeExpr }
-  deriving Show
+  deriving (Show, Eq)
 
 
 shexId :: ShapeExpr -> Maybe ShapeLabel

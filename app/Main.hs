@@ -8,18 +8,25 @@ import Data.Aeson hiding (parseJSON)
 import Data.String
 import Shexkell.Data.ShEx
 import Shexkell.Text.JSON.ShexParser ()
+import Shexkell
+import qualified Data.ByteString.Lazy.Char8 as B
 
 
 main :: IO ()
-main = getArgs >>= re . head
+main = do
+  (shapeMap:(graph:(schema:_))) <- getArgs
+  result <- validate (ShexOptions CompactFormat TurtleFormat) shapeMap graph schema
+  B.putStrLn $ encode result
+   
+
 
 mainJSON :: IO ()
 mainJSON = do
-    [path] <- getArgs
-    parsed <- parseJSON path
-    case parsed of
-        Left err -> print err
-        Right sch -> print sch
+  [path] <- getArgs
+  parsed <- parseJSON path
+  case parsed of
+    Left err -> print err
+    Right sch -> print sch
 
 
 re :: String -> IO ()

@@ -8,17 +8,17 @@ data NodeKind =
   | BNodeKind
   | NonLiteralKind
   | LiteralKind
-  deriving Show
+  deriving (Show, Eq)
 
 data XsFacet =
     XsStringFacet  StringFacet
   | XsNumericFacet NumericFacet
-  deriving Show
+  deriving (Show, Eq)
 
 data StringFacet =
     LitStringFacet     String Int
   | PatternStringFacet String String
-  deriving Show
+  deriving (Show, Eq)
 
 data NumericFacet =
     MinInclusive   String NumericLiteral
@@ -27,25 +27,25 @@ data NumericFacet =
   | MaxExclusive   String NumericLiteral
   | TotalDigits    String Int
   | FractionDigits String Int
-  deriving Show
+  deriving (Show, Eq)
 
 data NumericLiteral =
     NumericInt     Int
   | NumericDouble  Double
   | NumericDecimal Double
-  deriving Show
+  deriving (Show)
 
 
 data ValueSetValue =
     ObjectValue ObjectValue
   | Stem        IRI
   | StemRange   StemValue (Maybe [ValueSetValue])
-  deriving Show
+  deriving (Show, Eq)
 
 data StemValue =
     IRIStem IRI
   | Wildcard
-  deriving Show
+  deriving (Show, Eq)
 
 instance Eq NumericLiteral where
   (NumericInt n1) == (NumericInt n2) = n1 == n2

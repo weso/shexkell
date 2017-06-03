@@ -57,8 +57,10 @@ partitionN :: (Ord a, Monad m) =>
   -> Set.Set a
   -> Int
   -> m (Maybe [Set.Set a])
-partitionN pred set size = partitionMany pred (Set.toList set) (map (const Set.empty) [1..size])  
-
+partitionN pred set size = partitionMany mkPred (Set.toList set) (map (const Set.empty) [1..size])  
+  where mkPred sets
+          | Set.unions sets /= set = return False
+          | otherwise = pred sets
 
 partitionMany :: (Ord a, Monad m) =>
      ([Set.Set a] -> m Bool)     -- ^ Predicate
@@ -69,7 +71,10 @@ partitionMany pred (x:xs) st = pred st >>= checkPartition where
   checkPartition True  = return $ Just st
   checkPartition False = asum <$> mapM (partitionMany pred xs) (mapdate (Set.insert x) (square st ++ [map (const Set.empty) st]))
 
-partitionMany _ [] _ = return Nothing
+partitionMany pred [] st = pred st >>= checkLast where
+  checkLast True = return $ Just st
+  checkLast False = return Nothing
+
 
 
 square :: [a] -> [[a]]

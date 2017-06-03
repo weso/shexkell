@@ -7,8 +7,18 @@ import Test.HUnit
 import qualified Data.Set as Set
 import Shexkell.Semantic.Partition
 
+import Control.Monad.Identity
+
+
 partitionTests :: Test
-partitionTests = TestList [testFound, testNotFound]
+partitionTests = TestList [
+    testFound
+  , testNotFound
+
+  , testPartitionN1
+  , testPartitionN2
+  ]
+
 
 testSet :: Set.Set Int
 testSet = Set.fromList [1..10]
@@ -33,3 +43,34 @@ testNotFound = TestCase $ assertEqual
   "Test unsuccessful partition"
   Nothing
   (partition (== testPredNotFound) testSet)
+
+
+-----------------------------
+-- * Partition N -------------
+-----------------------------
+
+testData1 :: Set.Set Int
+testData1 = Set.fromList [1..5]
+
+runPartitionN :: (Ord a, Show a) =>
+     ([Set.Set a] -> Bool)
+  -> Set.Set a
+  -> Int
+  -> Maybe [Set.Set a]
+runPartitionN p set = runIdentity . partitionN (return . p) set 
+
+testPartitionN1 :: Test
+testPartitionN1 = TestCase $ assertEqual
+  "Test succesful partitionN 1"
+  (Just [Set.fromList [2, 4], Set.fromList [1, 3, 5]])
+  (runPartitionN evensLeftOddsRight testData1 2)
+  where
+    evensLeftOddsRight [left, right] = all even left && all odd right
+    evensLeftOddsRight _ = False
+
+testPartitionN2 :: Test    
+testPartitionN2 = TestCase $ assertEqual
+  "Test succesful partitionN 2"
+  (Just [Set.empty, Set.fromList [1, 2, 3, 4, 5]])
+  (runPartitionN leftEmpty testData1 2)
+  where leftEmpty [left, right] = Set.null left && right == Set.fromList [1, 2, 3, 4, 5]

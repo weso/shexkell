@@ -6,6 +6,7 @@ module Shexkell.Semantic.Validation where
 import Shexkell.Control.Validation
 import Shexkell.Data.Common
 import Shexkell.Data.ShEx
+import Shexkell.Data.ShapeMap
 import Shexkell.Data.TripleExpr
 import Shexkell.Semantic.NodeConstraint (satisfies2)
 import Shexkell.Semantic.Neighbourhood
@@ -17,14 +18,27 @@ import Data.Foldable (asum)
 import Data.Composition
 import Data.String
 import Data.Maybe
-import Data.List (find)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 
-import Debug.Trace
+
+-- | Perform the validation of a given graph agains a schema using a given Shape Map
+validateMap :: Rdf graph =>
+     Schema                  
+  -> RDF graph
+  -> ShapeMap
+  -> ShapeMap
+validateMap schema graph shapeMap@(ShapeMap inputMap) = execValidation
+  -- For every node in the Shape Map
+  (forM_ (Map.toList inputMap) $ \(node, shaps) ->
+    -- For every shape to validate the node against
+    forM_ shaps $ \ (shape, _) ->
+      -- Perform the validation
+      satisfiesM node shape) (ValidationContext graph schema) shapeMap
 
 
 satisfies :: Rdf graph =>
@@ -58,15 +72,15 @@ satisfiesM :: (
       Node
    -> ShapeExpr
    -> m Bool
-satisfiesM node shex@NodeConstraint{} = return $ satisfies2 shex node
+satisfiesM node shex@NodeConstraint{} = updateValidation node shex $ satisfies2 shex node
 
-satisfiesM node (ShapeOr _ exprs)  = anyM (satisfiesM node) exprs
+satisfiesM node shex@(ShapeOr _ exprs)  = anyM (satisfiesM node) exprs >>= updateValidation node shex
 
-satisfiesM node (ShapeAnd _ exprs) = allM (satisfiesM node) exprs
+satisfiesM node shex@(ShapeAnd _ exprs) = allM (satisfiesM node) exprs >>= updateValidation node shex
 
-satisfiesM node (ShapeNot _ expr) = not <$> satisfiesM node expr
+satisfiesM node shex@(ShapeNot _ expr) = not <$> satisfiesM node expr >>= updateValidation node shex
 
-satisfiesM node Shape{..} = do
+satisfiesM node shex@Shape{..} = do
   -- Get the graph
   gr <- reader graph
 
@@ -78,12 +92,12 @@ satisfiesM node Shape{..} = do
   let outs = remainder `Set.intersection` Set.fromList (arcsOut gr node)
   let matchables = maybe Set.empty (\expr -> Set.filter (containsPredicate expr) outs) expression
   let unmatchables = outs `Set.difference` matchables
-  
+
   sm <- case expression of
     Just expr -> not <$> anyM (`singleMatch` expr) (Set.toList matchables)
     Nothing   -> return True
 
-  return $ fromMaybe True (allM (inExtra extra . predicateOf) (Set.toList matchables))
+  updateValidation node shex $ fromMaybe True (allM (inExtra extra . predicateOf) (Set.toList matchables))
     && (maybe True not closed || Set.null unmatchables) && sm
 
 
@@ -101,6 +115,8 @@ inExtra _     _           = Just False
 
 containsPredicate :: TripleExpr -> Triple -> Bool
 containsPredicate TripleConstraint{..} (Triple _ (UNode iri) _) = iri == fromString predicate
+containsPredicate EachOf{..} tripl = any (`containsPredicate` tripl) expressions
+containsPredicate OneOf{..} tripl = any (`containsPredicate` tripl) expressions
 containsPredicate _                    _              = False
 
 
@@ -124,7 +140,7 @@ matches :: (
   -> m Bool
 matches triples tripleExpr
   | isJust (cardMin tripleExpr) || isJust (cardMax tripleExpr) = let
-    fromMin Nothing = 1
+    fromMin Nothing = 0
     fromMin (Just n) = n
     fromMax Nothing = 1
     fromMax (Just Star) = length triples
@@ -163,6 +179,8 @@ singleMatch t@(Triple s (UNode iri) o) TripleConstraint{..} = do
 
   let predicateMatches = iri == fromString predicate
 
-  valueMatches <- maybe (return True) (satisfiesM value) valueExpr
-
-  return $ predicateMatches && valueMatches && maybe True (const $ t `elem` arcs) inverse
+  if not predicateMatches then
+    return False
+  else do
+    valueMatches <- maybe (return True) (satisfiesM value) valueExpr
+    return $ valueMatches && maybe True (const $ t `elem` arcs) inverse

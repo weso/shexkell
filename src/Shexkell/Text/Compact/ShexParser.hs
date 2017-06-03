@@ -42,6 +42,7 @@ filterBases = foldl' (\ bs d -> case d of
 
 shexDoc :: ParserShex Schema
 shexDoc = do
+  skippeables
   dir <- many directive
   st <- optionMaybe  notStartAction
   statements <- many statement
@@ -104,7 +105,7 @@ shapeAnd = compositeShape shapeNot "AND" (ShapeAnd Nothing)
 
 shapeNot :: ParserShex ShapeExpr
 shapeNot = do
-  isNot <- isJust <$> optionMaybe (keyword "NOT" <* spaces)
+  isNot <- isJust <$> optionMaybe (keyword "NOT")
   shape <- shapeAtom
   return $ if isNot then ShapeNot Nothing shape else shape
 
@@ -125,9 +126,11 @@ shapeDefinition = do
   expr <- between (symbol '{') (symbol '}') (optionMaybe tripleExpr)
   -- annotation
   let closed = listToMaybe $ rights eoc
-  let extras = mconcat $ lefts eoc
+  let extras = case mconcat $ lefts eoc of
+        [] -> Nothing
+        ex -> Just ex
 
-  return $ Shape Nothing Nothing closed (Just extras) expr Nothing Nothing
+  return $ Shape Nothing Nothing closed extras expr Nothing Nothing
 
 extraOrClosed :: ParserShex (Either [IRI] Bool)
 extraOrClosed = (Right True <$ keyword "CLOSED") <|>
@@ -260,10 +263,10 @@ cardinality = (Nothing, Just Star) <$ symbol '*' <|>
 repeatRange :: ParserShex (Maybe Int, Maybe Max)
 repeatRange = do
   symbol '{'
-  min <- read <$> many1 digit <* spaces
+  min <- read <$> many1 digit <* skippeables
   max <- optionMaybe $ do
     symbol ','
-    (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit <* spaces)
+    (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit <* skippeables)
   symbol '}'
   return (Just min, max)
 

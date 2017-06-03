@@ -4,14 +4,14 @@ import Data.Char (toLower)
 
 
 data SemAct = SemAct IRI (Maybe String)
-  deriving Show
+  deriving (Show, Eq)
 
 data ObjectValue =
     IRIValue IRI
   | StringValue String
   | DatatypeString String IRI
   | LangString String String
-  deriving Show
+  deriving (Show, Eq)
 
 type IRI = String
 

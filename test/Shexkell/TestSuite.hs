@@ -23,6 +23,7 @@ import Control.Monad.Trans
 
 import Shexkell.Text
 import Shexkell.Data.ShEx
+import Shexkell.Data.ShapeMap
 import Shexkell.Data.Common
 
 import Shexkell.Semantic.Validation

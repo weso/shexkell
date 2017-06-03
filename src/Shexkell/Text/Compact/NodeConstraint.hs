@@ -69,7 +69,7 @@ stringFacet = try stringLengthFacet <|> patternStringFacet
 stringLengthFacet :: ParserShex StringFacet
 stringLengthFacet = do
   strLen <- stringLength
-  len    <- read <$> many1 digit <* spaces
+  len    <- read <$> many1 digit <* skippeables
   return $ LitStringFacet strLen len
 
 stringLength :: ParserShex String
@@ -81,7 +81,7 @@ patternStringFacet :: ParserShex StringFacet
 patternStringFacet = do
   strPat <- keyword "PATTERN"
   pat    <- char '\"' >> manyTill (noneOf "\"") (char '\"')
-  spaces
+  skippeables
   return $ PatternStringFacet strPat pat
 
 numericFacet :: ParserShex NumericFacet
@@ -94,5 +94,5 @@ numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
                    (MaxExclusive <$> keyword "MAXEXCLUSIVE")
 
 numericLiteral :: ParserShex NumericLiteral
-numericLiteral = try (NumericInt . read <$> many1 digit <* spaces) <|>
-                     (NumericDouble . read <$> many1 digit <* spaces) -- TODO
+numericLiteral = try (NumericInt . read <$> many1 digit <* skippeables) <|>
+                     (NumericDouble . read <$> many1 digit <* skippeables) -- TODO

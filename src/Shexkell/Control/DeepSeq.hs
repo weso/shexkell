@@ -9,6 +9,16 @@ import Shexkell.Data.ShEx
 import Shexkell.Data.ShapeExpr
 import Shexkell.Data.TripleExpr
 
+import Data.RDF.Types (PrefixMapping(..))
+
+instance NFData Schema where
+  rnf Schema{..} =
+    rnf prefixes `seq`
+    rnf base `seq`
+    rnf startAct `seq`
+    rnf start `seq`
+    rnf shapes
+
 instance NFData ShapeExpr where
   rnf NodeConstraint{..} =
     rnf dataType `seq`
@@ -107,3 +117,6 @@ instance Ord ShapeLabel where
 
   (IRILabel _) `compare` (BNodeId _) = GT
   (BNodeId _) `compare` (IRILabel _) = LT
+
+instance NFData PrefixMapping where
+  rnf (PrefixMapping tuple) = rnf tuple

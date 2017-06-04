@@ -11,12 +11,19 @@ import Shexkell.Text.JSON.ShexParser ()
 import Shexkell
 import qualified Data.ByteString.Lazy.Char8 as B
 
+import System.IO
+
 
 main :: IO ()
 main = do
   (shapeMap:(graph:(schema:_))) <- getArgs
-  result <- validate (ShexOptions CompactFormat TurtleFormat) shapeMap graph schema
-  B.putStrLn $ encode result
+
+  r <- withFile shapeMap ReadMode $ \ hShapeMap ->
+    withFile graph ReadMode $ \ hGraph ->
+      withFile schema ReadMode $ \ hSchema ->
+        validateIO (ShexOptions CompactFormat TurtleFormat) hShapeMap hGraph hSchema
+        
+  B.putStrLn $ encode r
    
 
 

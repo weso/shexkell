@@ -33,8 +33,10 @@ module Shexkell (
   , ShexParser
   , JSONShexParser
   , CompactShexParser
+  , NodeShapes
 
   , validate
+  , validateIO
   , ShexOptions(..)
   , ShexFormat(..)
   , GraphFormat(..)
@@ -56,35 +58,83 @@ import Shexkell.Semantic.Validation
 
 import Control.Monad.IO.Class
 import Control.Monad.Par.Class
-import Control.Monad.Par.IO
+import Control.Monad.Par.IO 
+import Control.Monad.Par (runPar)
 import Data.RDF
 
 import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.Map as M
 import qualified Data.ByteString.Lazy as B
-import qualified Data.Text as T
 
+import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+import Data.String (fromString)
+
+import System.IO
+
+
+-- | Perform the validation of an input Shape Map with a given schema and graph
+--   being the input parameters IO handles
+validateIO ::
+     ShexOptions -- ^ Options of the validation process
+  -> Handle      -- ^ Path of the Shape Map file
+  -> Handle      -- ^ Path of the RDF graph file
+  -> Handle      -- ^ Path of the ShEx schema file
+  -> IO ShapeMap -- ^ Resulting Shape Map
+validateIO ShexOptions{..} mapHandle graphHandle shexHandle = runParIO $ do  
+  -- Spawn the parsing in parallel
+  graph' <- spawn $ liftIO (readGraph graphFormat graphHandle :: IO (RDF TList))
+  shex'  <- spawn $ liftIO $ readShex  shexFormat  shexHandle
+  map'   <- spawn $ liftIO $ readMap mapHandle
+
+  -- Wait for all the parsing tasks to finish
+  graph <- get graph'
+  shex  <- get shex'
+  map   <- get map'
+
+  -- Perform the validation and return the results
+  return $ validateMap shex graph (mkMap graph shex map)
 
 -- | Perform the validation of an input Shape Map with a given schema and graph
 validate ::
      ShexOptions -- ^ Options of the validation process
-  -> FilePath    -- ^ Path of the Shape Map file
-  -> FilePath    -- ^ Path of the RDF graph file
-  -> FilePath    -- ^ Path of the ShEx schema file
-  -> IO ShapeMap -- ^ Resulting Shape Map
-validate ShexOptions{..} mapPath graphPath shexPath = runParIO $ do  
-  graph' <- spawn $ liftIO (readGraph graphFormat graphPath :: IO (RDF TList))
-  shex'  <- spawn $ liftIO $ readShex  shexFormat  shexPath
-  map'   <- spawn $ liftIO $ readMap mapPath
+  -> String      -- ^ String representation of the Shape Map
+  -> String      -- ^ String representation of the RDF graph
+  -> String      -- ^ String representation of the ShEx schema
+  -> ShapeMap    -- ^ Resulting Shape Map
+validate ShexOptions{..} mapStr graphStr shexStr = runPar $ do
+  -- Spawn the parsing in parallel
+  graph' <- spawnP $ parseGraph graphFormat (fromString graphStr)
+  shex'  <- spawnP $ parseSchema shexFormat (fromString shexStr)
+  map'   <- spawnP $ parseMap mapStr
+
+  -- Wait for all the parsing tasks to finish
   graph <- get graph'
-  shex <- get shex'
-  map <- get map'
+  shex  <- get shex'
+  map   <- get map'
+
+  -- Perform the validation and return the results
   return $ validateMap shex graph (mkMap graph shex map)
 
+  where
+    parseGraph :: GraphFormat -> T.Text -> RDF TList
+    parseGraph TurtleFormat input = case parseString (TurtleParser Nothing Nothing) input of
+      Right parsed -> parsed
+      Left err -> error $ show err
+    
+    parseMap :: String -> [NodeShapes]
+    parseMap str = case eitherDecode (fromString str) of
+      Right parsed -> parsed
+      Left err -> error err
+
+
+---------------------------------------------------------------
+-- * Validation options
+---------------------------------------------------------------
 
 -- | Options for the validation
-data ShexOptions = ShexOptions {
+data ShexOptions = ShexOptions{
     shexFormat :: ShexFormat
   , graphFormat :: GraphFormat
 }
@@ -97,34 +147,34 @@ data GraphFormat = TurtleFormat
 
 
 ---------------------------------------------------------------
--- * File reading ---------------------------------------------
+-- * Parsing --------------------------------------------------
 ---------------------------------------------------------------
 
-readGraph :: Rdf gr => GraphFormat -> FilePath -> IO (RDF gr)
-readGraph TurtleFormat path = do
-  graph <- parseFile (TurtleParser Nothing Nothing) path
+readGraph :: Rdf gr => GraphFormat -> Handle -> IO (RDF gr)
+readGraph TurtleFormat handle = do
+  graph <- parseString (TurtleParser Nothing Nothing) <$> TIO.hGetContents handle
   case graph of
     Right parsed -> return parsed
     Left err -> error $ show err
 
-readShex :: ShexFormat -> FilePath -> IO Schema
-readShex format path = do
-  file <- readFile path
-  case fromFormat format file of
-    Left err -> error err
-    Right shex -> return shex
-  where
-    fromFormat :: ShexFormat -> String -> Either String Schema
-    fromFormat JsonFormat str = parseShex str JSONShexParser
-    fromFormat CompactFormat str = parseShex str CompactShexParser
+readShex :: ShexFormat -> Handle -> IO Schema
+readShex format = fmap (parseSchema format) . hGetContents
 
-readMap :: FilePath -> IO [NodeShapes]
-readMap path = do
-  file <- B.readFile path
+readMap :: Handle -> IO [NodeShapes]
+readMap handle = do
+  file <- B.hGetContents handle
   case eitherDecode file of
     Left err -> error err
     Right result -> return result
 
+parseSchema :: ShexFormat -> String -> Schema
+parseSchema format str = case fromFormat format str of
+  Left err -> error err
+  Right shex -> shex
+  where
+    fromFormat :: ShexFormat -> String -> Either String Schema
+    fromFormat JsonFormat str = parseShex str JSONShexParser
+    fromFormat CompactFormat str = parseShex str CompactShexParser
 
 --------------------------------------------
 -- * Format of the Shape Map file ----------
@@ -134,11 +184,12 @@ readMap path = do
 data NodeShapes = NodeShapes {
     node :: Node
   , validation :: [ShapeValidation]
-}
+} deriving Show
 
 -- | Relation of Shape and expected result for the validation against
 --   that shape
 data ShapeValidation = ShapeValidation String ValidationResult
+  deriving Show
 
 -- | Specifies the structure of the Shape Map format to create the
 --   ShapeMap

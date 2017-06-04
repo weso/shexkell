@@ -49,19 +49,19 @@ updateValidation node shape result = do
   modify $ ShapeMap . M.alter updateNode node . shapeMap
   return result
 
-        -- | If the node is not in the Shape Map
+        -- If the node is not in the Shape Map
   where updateNode Nothing = Just [(shape, validationResult result)]
-        -- | If the node is in the Shape Map
+        -- If the node is in the Shape Map
         updateNode (Just shapeResults) = Just $ updateShape shapeResults 
 
         hasShape (expectedShape, _) = expectedShape == shape
 
-        -- | If the shape is present, combines the results
+        -- If the shape is present, combines the results
         combineShape (expectedShape, previousResult)
           | shape == expectedShape = (shape, combine previousResult (validationResult result))
           | otherwise = (expectedShape, previousResult)
         
-        -- | Updates or inserts the shape with the result in the value for the node
+        -- Updates or inserts the shape with the result in the value for the node
         updateShape shapeResults 
           | any hasShape shapeResults = map combineShape shapeResults
           | otherwise = (shape, validationResult result):shapeResults

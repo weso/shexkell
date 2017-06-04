@@ -10,6 +10,17 @@ Clone the repo and cd to it. In order to build the development environment:
 
  This will download all the necessary dependencies for the project
 
+## Running Shexkell ##
+Shexkell comes with a *Command Line Interface* to validate nodes of a given graph agains a given schema, with a given
+Shape Map. To run it, pass the folowing arguments to the executable:
+```sh
+$ shexkell -map <Shape Map path> -rdf <graph path> -shex <ShEx schema path>
+```
+
+The following flags can be added to specify the format of the files:
+* ```--compact``` Parse the ShEx schema as ShExC
+* ```--json``` Parse the ShEx schema as JSONLD (ShExJ)
+
 ## Test suite ##
 
 ### Unit tests ###

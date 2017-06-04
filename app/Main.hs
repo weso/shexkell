@@ -1,47 +1,93 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 
+import System.IO
 import System.Environment
-
-import Shexkell.Text
+import CommandLine
 
 import Data.Aeson hiding (parseJSON)
-import Data.String
-import Shexkell.Data.ShEx
-import Shexkell.Text.JSON.ShexParser ()
-import Shexkell
+import Shexkell hiding (graphFormat)
 import qualified Data.ByteString.Lazy.Char8 as B
 
-import System.IO
+import Data.Maybe (fromMaybe)
+
+import Control.Monad.Trans.Either hiding (left)
+import Control.Monad.Trans.Class
 
 
 main :: IO ()
 main = do
-  (shapeMap:(graph:(schema:_))) <- getArgs
+  validation <- runEitherT validateWithOptions
+  case validation of
+    Left err  -> putStrLn ("Error: " ++ err)
+    Right result -> B.putStrLn $ encode result
 
-  r <- withFile shapeMap ReadMode $ \ hShapeMap ->
+
+-- | Parse the arguments of the program to get the options and run
+--   the validation with them
+validateWithOptions :: EitherT String IO ShapeMap
+validateWithOptions = do
+  -- Parse the arguments
+  args    <- lift getArgs
+  ShexkellOptions{..} <- hoistEither $ fromArgs args
+
+  -- Get the path of the files
+  shMap  <- toEitherT "Expected Shape Map path"   shapeMapFile
+  graph  <- toEitherT "Expected RDF graph path"   graphFile
+  schema <- toEitherT "Expected ShEx schema path" schemaFile
+
+  -- Get the format for the parsing or their default values
+  let schFormat  = fromMaybe CompactFormat schemaFormat
+  let grphFormat = fromMaybe TurtleFormat  graphFormat
+
+  -- Perform the validation
+  lift $ withFile shMap ReadMode $ \ hShapeMap ->
     withFile graph ReadMode $ \ hGraph ->
       withFile schema ReadMode $ \ hSchema ->
-        validateIO (ShexOptions CompactFormat TurtleFormat) hShapeMap hGraph hSchema
-        
-  B.putStrLn $ encode r
-   
+        validateIO (ShexOptions schFormat grphFormat) hShapeMap hGraph hSchema
 
 
-mainJSON :: IO ()
-mainJSON = do
-  [path] <- getArgs
-  parsed <- parseJSON path
-  case parsed of
-    Left err -> print err
-    Right sch -> print sch
+------------------------------------------------------
+-- * Options parsing
+------------------------------------------------------
+
+data ShexkellOptions = ShexkellOptions {
+    shapeMapFile :: Maybe FilePath
+  , graphFile    :: Maybe FilePath
+  , schemaFile   :: Maybe FilePath
+
+  , schemaFormat :: Maybe ShexFormat
+  , graphFormat  :: Maybe GraphFormat
+}
 
 
-re :: String -> IO ()
-re path = do
-  contents <- readFile path
-  case parseShex contents CompactShexParser of
-      Left err -> print err
-      Right success -> print success
+instance CLIOptions ShexkellOptions where
+  dflt = ShexkellOptions {
+      shapeMapFile = Nothing
+    , graphFile    = Nothing
+    , schemaFile   = Nothing
+    , schemaFormat = Nothing
+    , graphFormat  = Nothing
+  }
 
-parseJSON :: String -> IO (Either String Schema)
-parseJSON fileName = eitherDecode . fromString <$> readFile fileName
+  addFlag "compact" opts = opts { schemaFormat = Just CompactFormat } 
+  addFlag "json"    opts = opts { schemaFormat = Just JsonFormat }
+  addFlag _ opts = opts
+
+  addParam ("rdf", rdf)   opts = opts { graphFile = Just rdf }
+  addParam ("shex", shex) opts = opts { schemaFile = Just shex }
+  addParam ("map", shMap) opts = opts { shapeMapFile = Just shMap }
+  addParam _ opts = opts 
+
+
+------------------------------------------------------
+-- * Utils
+------------------------------------------------------
+
+toEither :: a -> Maybe b -> Either a b
+toEither left Nothing  = Left left
+toEither _    (Just r) = Right r
+
+toEitherT :: Monad m => a -> Maybe b -> EitherT a m b
+toEitherT left = hoistEither . toEither left

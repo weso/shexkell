@@ -72,6 +72,7 @@ instance NConstraint NodeKind where
 -- target type v per XPath 2.0 section 17, Casting[xpath-functions].
 nodeSatisfiesDataType :: Node -> IRI -> Bool
 nodeSatisfiesDataType (LNode (TypedL _ uri)) iri = uri == fromString iri
+nodeSatisfiesDataType (LNode (PlainL _)) "http://www.w3.org/2001/XMLSchema#string" = True
 nodeSatisfiesDataType _  _                       = False
 
 

@@ -108,6 +108,10 @@ withoutCardinality expr@OneOf{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr@TripleConstraint{} = expr { cardMin = Nothing, cardMax = Nothing }
 withoutCardinality expr = expr
 
+isTripleConstraint :: TripleExpr -> Bool
+isTripleConstraint TripleConstraint{..} = True
+isTripleConstraint _                    = False
+
 findShapeByLabel :: ShapeLabel -> Schema -> Maybe ShapeExpr
 findShapeByLabel lbl Schema{..} = shapes >>= find (matchesId . shexId) where
   matchesId shapeId = shapeId == Just lbl 

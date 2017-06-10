@@ -52,8 +52,8 @@ import Control.DeepSeq
 import Shexkell.Control.DeepSeq ()
 
 import Shexkell.Text
-
 import Shexkell.Semantic.Validation
+import Shexkell.Utils.Either
 
 
 import Control.Monad.IO.Class
@@ -70,6 +70,7 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.String (fromString)
+import Data.Maybe (isJust)
 
 import System.IO
 
@@ -81,12 +82,12 @@ validateIO ::
   -> Handle      -- ^ Path of the Shape Map file
   -> Handle      -- ^ Path of the RDF graph file
   -> Handle      -- ^ Path of the ShEx schema file
-  -> IO ShapeMap -- ^ Resulting Shape Map
+  -> IO (Either String ShapeMap) -- ^ Resulting Shape Map
 validateIO ShexOptions{..} mapHandle graphHandle shexHandle = runParIO $ do  
   -- Spawn the parsing in parallel
-  graph' <- spawn $ liftIO (readGraph graphFormat graphHandle :: IO (RDF TList))
-  shex'  <- spawn $ liftIO $ readShex  shexFormat  shexHandle
-  map'   <- spawn $ liftIO $ readMap mapHandle
+  graph' <- spawnEitherIO $ readGraph graphFormat graphHandle
+  shex'  <- spawnEitherIO $ readShex  shexFormat  shexHandle
+  map'   <- spawnEitherIO $ readMap mapHandle
 
   -- Wait for all the parsing tasks to finish
   graph <- get graph'
@@ -94,15 +95,23 @@ validateIO ShexOptions{..} mapHandle graphHandle shexHandle = runParIO $ do
   map   <- get map'
 
   -- Perform the validation and return the results
-  return $ validateMap shex graph (mkMap graph shex map)
+  return $ do
+    g <- graph
+    s <- shex
+    m <- map
+    return $ validateMap s g (mkMap g s m)
+
+  where 
+    spawnEitherIO :: (NFData a, NFData b) => EitherT a IO b -> ParIO (IVar (Either a b))
+    spawnEitherIO = spawn . liftIO . runEitherT
 
 -- | Perform the validation of an input Shape Map with a given schema and graph
 validate ::
-     ShexOptions -- ^ Options of the validation process
-  -> String      -- ^ String representation of the Shape Map
-  -> String      -- ^ String representation of the RDF graph
-  -> String      -- ^ String representation of the ShEx schema
-  -> ShapeMap    -- ^ Resulting Shape Map
+     ShexOptions               -- ^ Options of the validation process
+  -> String                    -- ^ String representation of the Shape Map
+  -> String                    -- ^ String representation of the RDF graph
+  -> String                    -- ^ String representation of the ShEx schema
+  -> Either String ShapeMap    -- ^ Resulting Shape Map
 validate ShexOptions{..} mapStr graphStr shexStr = runPar $ do
   -- Spawn the parsing in parallel
   graph' <- spawnP $ parseGraph graphFormat (fromString graphStr)
@@ -115,18 +124,18 @@ validate ShexOptions{..} mapStr graphStr shexStr = runPar $ do
   map   <- get map'
 
   -- Perform the validation and return the results
-  return $ validateMap shex graph (mkMap graph shex map)
+  return $ do
+    g <- graph
+    s <- shex
+    m <- map
+    return $ validateMap s g (mkMap g s m)
 
   where
-    parseGraph :: GraphFormat -> T.Text -> RDF TList
-    parseGraph TurtleFormat input = case parseString (TurtleParser Nothing Nothing) input of
-      Right parsed -> parsed
-      Left err -> error $ show err
+    parseGraph :: GraphFormat -> T.Text -> Either String (RDF TList)
+    parseGraph TurtleFormat = mapLeft show . parseString (TurtleParser Nothing Nothing) 
     
-    parseMap :: String -> [NodeShapes]
-    parseMap str = case eitherDecode (fromString str) of
-      Right parsed -> parsed
-      Left err -> error err
+    parseMap :: String -> Either String [NodeShapes]
+    parseMap str = mapLeft show $ eitherDecode $ fromString str
 
 
 ---------------------------------------------------------------
@@ -150,31 +159,25 @@ data GraphFormat = TurtleFormat
 -- * Parsing --------------------------------------------------
 ---------------------------------------------------------------
 
-readGraph :: Rdf gr => GraphFormat -> Handle -> IO (RDF gr)
+readGraph :: GraphFormat -> Handle -> EitherT String IO (RDF TList)
 readGraph TurtleFormat handle = do
-  graph <- parseString (TurtleParser Nothing Nothing) <$> TIO.hGetContents handle
-  case graph of
-    Right parsed -> return parsed
-    Left err -> error $ show err
+  contents <- lift $ TIO.hGetContents handle
+  mapLeftT show $ hoistEither $ parseString (TurtleParser Nothing Nothing) contents
 
-readShex :: ShexFormat -> Handle -> IO Schema
-readShex format = fmap (parseSchema format) . hGetContents
+readShex :: ShexFormat -> Handle -> EitherT String IO Schema
+readShex format h = do 
+  content <- lift $ hGetContents h
+  hoistEither $ parseSchema format content
 
-readMap :: Handle -> IO [NodeShapes]
+readMap :: Handle -> EitherT String IO [NodeShapes]
 readMap handle = do
-  file <- B.hGetContents handle
-  case eitherDecode file of
-    Left err -> error err
-    Right result -> return result
+  file <- lift $ B.hGetContents handle
+  mapLeftT show $ hoistEither $ eitherDecode file
 
-parseSchema :: ShexFormat -> String -> Schema
-parseSchema format str = case fromFormat format str of
-  Left err -> error err
-  Right shex -> shex
-  where
-    fromFormat :: ShexFormat -> String -> Either String Schema
-    fromFormat JsonFormat str = parseShex str JSONShexParser
-    fromFormat CompactFormat str = parseShex str CompactShexParser
+parseSchema :: ShexFormat -> String -> Either String Schema
+parseSchema JsonFormat    = flip parseShex JSONShexParser
+parseSchema CompactFormat = flip parseShex CompactShexParser
+
 
 --------------------------------------------
 -- * Format of the Shape Map file ----------
@@ -243,8 +246,9 @@ instance FromJSON Node where
 -- Serializing
 
 instance ToJSON ShapeMap where
-  toJSON (ShapeMap shmap) = toJSON [object ["node" .= node, "shapes" .= map jsonShape shapes] | (node, shapes) <- M.toList shmap]
+  toJSON (ShapeMap shmap) = toJSON [object ["node" .= node, "shapes" .= [jsonShape sh | sh <- shapes, hasLabel sh]] | (node, shapes) <- M.toList shmap]
     where jsonShape (shape, res) = object ["shape" .= shape, "result" .= res]
+          hasLabel (shape, _) = isJust $ shexId shape
 
 instance ToJSON ShapeExpr where
   toJSON = String . T.pack . maybe "" showLabel . shexId

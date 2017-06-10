@@ -38,7 +38,7 @@ type Flag = String
 -------------------------------------------------
 
 parseArgs :: [String] -> Either String CommandLineOptions
-parseArgs = fmap fst <$> foldM accumulate (CommandLineOptions [] [], Nothing)
+parseArgs = fmap fst . foldM accumulate (CommandLineOptions [] [], Nothing)
   where
     accumulate (clo@CommandLineOptions{..}, Nothing) ('-':('-':flag)) =
       Right (clo { flags = flag:flags }, Nothing)

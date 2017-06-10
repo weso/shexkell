@@ -6,6 +6,7 @@ module Shexkell.Data.ShapeMap where
 
 import qualified Data.Map as Map
 import           Data.RDF
+import           Data.List
 import           Data.Maybe (fromJust)
 
 import           Shexkell.Data.ShEx hiding (shapes)
@@ -44,3 +45,25 @@ class ShapeMapRef a n s | a -> n, a -> s where
   mkShapeLabel :: a -> s -> ShapeLabel
   -- | Create a expected validation result from a shape reference
   result :: a -> s -> ValidationResult
+
+
+-- | Find the result of a previous validation of a given node against
+--   a given Shape
+findResult :: Node -> ShapeExpr -> ShapeMap -> Maybe ValidationResult
+findResult node shape (ShapeMap shMap) =
+  snd <$> (Map.lookup node shMap >>= find ((== shape) . fst))
+
+combineShapeMaps :: ShapeMap -> ShapeMap -> ShapeMap
+combineShapeMaps (ShapeMap shMap) (ShapeMap shMap') = ShapeMap $ Map.unionWith combineShapes shMap shMap'
+  where combineShapes shapes shapes' = combineShape $ groupBy shape $ union shapes shapes'
+        shape :: (ShapeExpr, ValidationResult) -> (ShapeExpr, ValidationResult) -> Bool
+        shape (sh, _) (sh', _) = sh == sh'
+
+        combineShape :: [[(ShapeExpr, ValidationResult)]] -> [(ShapeExpr, ValidationResult)]
+        combineShape = map combineResult
+        
+        combineResult :: [(ShapeExpr, ValidationResult)] -> (ShapeExpr, ValidationResult)
+        combineResult = foldl1 combine 
+        combine (sh , r) (_, r')
+          | r == r' = (sh, Positive)
+          | otherwise = (sh, Negative)

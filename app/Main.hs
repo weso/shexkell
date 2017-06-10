@@ -42,11 +42,10 @@ validateWithOptions = do
   let grphFormat = fromMaybe TurtleFormat  graphFormat
 
   -- Perform the validation
-  lift $ withFile shMap ReadMode $ \ hShapeMap ->
+  hoistEither =<< lift (withFile shMap ReadMode $ \ hShapeMap ->
     withFile graph ReadMode $ \ hGraph ->
       withFile schema ReadMode $ \ hSchema ->
-        validateIO (ShexOptions schFormat grphFormat) hShapeMap hGraph hSchema
-
+        validateIO (ShexOptions schFormat grphFormat) hShapeMap hGraph hSchema)
 
 ------------------------------------------------------
 -- * Options parsing

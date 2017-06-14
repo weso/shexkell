@@ -32,6 +32,7 @@ library
                      , Shexkell.Text.Compact.ShexParser
                      , Shexkell.Text.Compact.NodeConstraint
                      , Shexkell.Text.Compact.Common
+                     , Shexkell.Text.RDF.Literal
                      , Shexkell.Text.Compact.Control
 
                      , Shexkell.Text.JSON.ShexParser

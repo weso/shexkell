@@ -74,6 +74,8 @@ import Data.Maybe (isJust)
 
 import System.IO
 
+import Debug.Trace
+
 
 -- | Perform the validation of an input Shape Map with a given schema and graph
 --   being the input parameters IO handles
@@ -260,6 +262,7 @@ instance ToJSON ValidationResult where
 instance ToJSON Node where
   toJSON n@(UNode text) = object ["nodeType" .= nodeType n, "value" .= text]
   toJSON n@(BNode value) = object ["nodeType" .= nodeType n, "value" .= value]
+  toJSON n@(BNodeGen nodeId) = object ["nodeType" .= nodeType n, "value" .= nodeId]
   toJSON n@(LNode (PlainL value)) = object ["nodeType" .= nodeType n, "value" .= value]
   toJSON n@(LNode (TypedL value t)) = object ["nodeType" .= nodeType n, "value" .= value, "type" .= t]
 
@@ -268,6 +271,7 @@ nodeType :: Node -> String
 nodeType (UNode _) = "unode"
 nodeType (BNode _) = "bnode"
 nodeType (LNode _) = "literal"
+nodeType (BNodeGen _) = "bnode"
 
 showLabel :: ShapeLabel -> String
 showLabel (IRILabel iri) = iri

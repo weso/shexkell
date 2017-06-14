@@ -106,6 +106,7 @@ instance NFData ObjectValue where
   rnf (StringValue str) = rnf str
   rnf (DatatypeString str iri) = rnf str `seq` rnf iri
   rnf (LangString a b) = rnf a `seq` rnf b
+  rnf (NumericValue n) = rnf n
 
 instance NFData ShapeLabel where
   rnf (IRILabel iri) = rnf iri

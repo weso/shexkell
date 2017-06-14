@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Shexkell.Semantic.NodeConstraint
   (
@@ -13,9 +14,12 @@ import Shexkell.Semantic.Datatype
 import Data.RDF (Node(..), LValue(TypedL, PlainL, PlainLL))
 import Data.String
 import Data.Text (Text)
-import qualified Data.Text as T (length)
+import qualified Data.Text as T (length, unpack)
 import Data.Text.Read (decimal, double, Reader)
 import Text.Regex.XMLSchema.Generic (match)
+import Text.Read
+
+import Debug.Trace
 
 
 -- | Check if a node satisfies a node constraint
@@ -52,10 +56,12 @@ instance NConstraint ShapeExpr where
 instance NConstraint NodeKind where
   satisfiesConstraint (UNode _) IRIKind = True
   satisfiesConstraint (BNode _) BNodeKind = True
+  satisfiesConstraint (BNodeGen _) BNodeKind = True
   satisfiesConstraint (LNode _) LiteralKind = True
 
   satisfiesConstraint (UNode _) NonLiteralKind = True
   satisfiesConstraint (BNode _) NonLiteralKind = True
+  satisfiesConstraint (BNodeGen _) NonLiteralKind = True
 
   satisfiesConstraint _ _ = False
 
@@ -73,6 +79,7 @@ instance NConstraint NodeKind where
 nodeSatisfiesDataType :: Node -> IRI -> Bool
 nodeSatisfiesDataType (LNode (TypedL _ uri)) iri = uri == fromString iri
 nodeSatisfiesDataType (LNode (PlainL _)) "http://www.w3.org/2001/XMLSchema#string" = True
+nodeSatisfiesDataType (LNode (PlainLL _ _ )) "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" = True
 nodeSatisfiesDataType _  _                       = False
 
 
@@ -88,15 +95,24 @@ nodeSatisfiesDataType _  _                       = False
 --    * vsv is a Wildcard with exclusions excls and there is no x in excls such that nodeIn(n, excl).
 instance NConstraint ValueSetValue where
   satisfiesConstraint node (ObjectValue oValue) = satisfiesConstraint node oValue
-  satisfiesConstraint (UNode uri) (Stem iri)    = uri == fromString iri 
+  satisfiesConstraint (UNode uri) (Stem (IRIStem iri))    = uri == fromString iri 
 
 instance NConstraint ObjectValue where
+  -- IRI
   satisfiesConstraint (UNode uri) (IRIValue iri) = uri == fromString iri
+
+  -- Literals
   satisfiesConstraint (LNode (PlainL value)) (StringValue str) = fromString str == value
   satisfiesConstraint (LNode (TypedL value t)) (DatatypeString value' t') =
     value == fromString value' && t == fromString t'
   satisfiesConstraint (LNode (PlainLL value lang)) (LangString value' lang') =
     value == fromString value' && lang == fromString lang'
+
+  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#integer")) (NumericValue (NumericInt value')) = maybe False (== value') (readMaybe $ T.unpack value)
+  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#double")) (NumericValue (NumericDouble value')) = maybe False (== value') (readMaybe $ T.unpack value)
+  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#decimal")) (NumericValue (NumericDouble value')) = maybe False (== value') (readMaybe $ T.unpack value)
+  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#decimal")) (NumericValue (NumericDecimal value')) = maybe False (== value') (readMaybe $ T.unpack value)
+
   satisfiesConstraint _ _ = False
 
 ----------------------------------------------------------------------
@@ -108,9 +124,9 @@ instance NConstraint XsFacet where
   satisfiesConstraint node (XsNumericFacet numFacet) = satisfiesConstraint node numFacet
   
 instance NConstraint StringFacet where
-  satisfiesConstraint node (LitStringFacet "length" n)    = (== n) `satisfiesLength` node
-  satisfiesConstraint node (LitStringFacet "minlength" n) = (>= n) `satisfiesLength` node
-  satisfiesConstraint node (LitStringFacet "maxlength" n) = (<= n) `satisfiesLength` node
+  satisfiesConstraint node (LitStringFacet "LENGTH" n)    = (== n) `satisfiesLength` node
+  satisfiesConstraint node (LitStringFacet "MINLENGTH" n) = (>= n) `satisfiesLength` node
+  satisfiesConstraint node (LitStringFacet "MAXLENGTH" n) = (<= n) `satisfiesLength` node
 
   satisfiesConstraint node (PatternStringFacet _ patt) =
     maybe False (`match` fromString patt) (nodeLex node)
@@ -123,7 +139,7 @@ instance NConstraint NumericFacet where
   satisfiesConstraint node (MaxInclusive _ lit) = compareLiteral (>= lit) node
   satisfiesConstraint node (MaxExclusive _ lit) = compareLiteral (> lit) node
   satisfiesConstraint (LNode (TypedL v _)) (TotalDigits _ n) = T.length v == n
-  satisfiesConstraint _ (FractionDigits _ _)   = False -- TODO
+  satisfiesConstraint (LNode (TypedL v _)) (FractionDigits _ n)   = n <= (length (dropWhile (/= '.') $ show v) - 1)
   satisfiesConstraint _    _                   = False 
 
 

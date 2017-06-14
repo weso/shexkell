@@ -19,8 +19,10 @@ import Data.Foldable (asum)
 import Data.Composition
 import Data.String
 import Data.Maybe
+
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Text as T
 
 import Control.Monad
 import Control.Monad.Reader
@@ -89,7 +91,7 @@ satisfiesM node shex@(ShapeNot _ expr) = checkNode node shex $
 satisfiesM node shex@Shape{..} = checkNode node shex $ do
   -- Get the graph
   gr <- reader graph
-
+  
   -- If there's a expression, find the partition that matches it
   part <- maybe (return Nothing) (\expr ->
     partitionM (`matches` expr) (Set.fromList $ neigh gr node)) expression
@@ -105,7 +107,9 @@ satisfiesM node shex@Shape{..} = checkNode node shex $ do
                                        , constraint <- tripleConstraintsOf expr]
     Nothing   -> return True
 
-  return $ sm && fromMaybe True (allM (inExtra extra . predicateOf) (Set.toList matchables))
+  let partitioned = maybe True (const $ isJust part) expression
+
+  return $ partitioned && sm && maybe (Set.null matchables) (allMatchablesInExtra matchables) extra
     && (maybe True not closed || Set.null unmatchables)
 
 
@@ -116,9 +120,10 @@ satisfiesM node shape@(ShapeRef label) = checkNode node shape $ do
     _             -> return False
 
 
-inExtra :: Maybe [IRI] -> Node -> Maybe Bool
-inExtra extra (UNode iri) = elem iri . map fromString <$> extra
-inExtra _     _           = Just False
+allMatchablesInExtra :: Set.Set Triple -> [IRI] -> Bool
+allMatchablesInExtra matchables extras = Set.null $ Set.filter (not . inExtra) matchables where
+  inExtra :: Triple -> Bool
+  inExtra tripl = predicateOf tripl `elem` map (unode . T.pack) extras
 
 
 containsPredicate :: TripleExpr -> Triple -> Bool
@@ -193,8 +198,8 @@ singleMatch t@(Triple s (UNode iri) o) TripleConstraint{..} = do
   let getArcs = if inv then arcsIn else arcsOut
   let arcs = getArcs gr node
 
-  let predicateMatches = iri == fromString predicate
-
+  let predicateMatches = iri == fromString predicate 
+  
   if not (t `elem` arcs && predicateMatches) then
     return False
   else 

@@ -34,7 +34,7 @@ partitionM :: (Monad m, Ord a) =>
   -> m (Maybe (Set.Set a, Set.Set a))   -- ^ 2-Tuple with the partition that
                                         --   satisfies the predicate at the left
                                         --   and the remainder at right
-partitionM p set = findPartition p (Set.empty, set)
+partitionM p set = findPartition p (set, Set.empty) 
 
 -- | Given an initial partition, try recursively the different combinations until
 --   one that satisfies a predicate is found
@@ -48,8 +48,8 @@ findPartition p current@(left, _) = p left >>= checkPartition where
 
 -- | Gets the different combinations from a partition
 expand :: Ord a => (Set.Set a, Set.Set a) -> Set.Set (Set.Set a, Set.Set a)
-expand (left, right) = Set.map swap right
-  where swap element = (element `Set.insert` left, element `Set.delete` right)
+expand (left, right) = Set.map swap left
+  where swap element = (element `Set.delete` left, element `Set.insert` right)
 
 
 partitionN :: (Ord a, Monad m) =>
@@ -59,8 +59,8 @@ partitionN :: (Ord a, Monad m) =>
   -> m (Maybe [Set.Set a])
 partitionN pred set size = partitionMany mkPred (Set.toList set) (map (const Set.empty) [1..size])  
   where mkPred sets
-          | Set.unions sets /= set = return False
-          | otherwise = pred sets
+         | Set.unions sets /= set = return False
+         | otherwise = pred sets
 
 partitionMany :: (Ord a, Monad m) =>
      ([Set.Set a] -> m Bool)     -- ^ Predicate

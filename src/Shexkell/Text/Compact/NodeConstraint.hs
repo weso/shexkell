@@ -2,12 +2,18 @@ module Shexkell.Text.Compact.NodeConstraint where
 
 import Shexkell.Text.Compact.Control
 import Shexkell.Text.Compact.Common
+import Shexkell.Text.RDF.Literal
 
 import Shexkell.Data.ShEx
 import Shexkell.Data.ShapeExpr
 import Shexkell.Data.Common
 
 import Text.ParserCombinators.Parsec
+import Data.Maybe (fromMaybe)
+import Numeric
+
+import Debug.Trace
+
 
 nodeConstraint :: ParserShex ShapeExpr
 nodeConstraint =
@@ -45,20 +51,51 @@ valueSet = do
   return $ NodeConstraint Nothing Nothing Nothing facets (Just vs)
 
 valueSetValue :: ParserShex ValueSetValue
-valueSetValue = iriRange-- <|> literal
+valueSetValue = iriRange <|> literalRange
 
 iriRange :: ParserShex ValueSetValue
-iriRange = (do
-  i <- iri
-  p <- optionMaybe (symbol '~' >> many exclusion)
-  return $ case p of
-    Nothing -> ObjectValue (IRIValue i)
-    Just [] -> Stem i
-    Just ex -> StemRange (IRIStem i) (Just ex)) <|>
-               StemRange Wildcard . Just <$> (symbol '.' >> many1 exclusion)
+-- iriRange = (do
+--   i <- iri
+--   p <- optionMaybe (symbol '~' >> many iriExclusion)
+--   return $ case p of
+--     Nothing -> ObjectValue (IRIValue i)
+--     Just [] -> Stem i
+--     Just ex -> StemRange (IRIStem i) (Just ex)) <|>
+--                StemRange Wildcard . Just <$> (symbol '.' >> many1 iriExclusion)
 
-exclusion :: ParserShex ValueSetValue
-exclusion = Stem <$> (symbol '-' *> iri <* symbol '~')
+-- literalRange :: ParserShex ValueSetValue
+
+iriRange = range iri iri IRIValue IRIStem (Stem . IRIStem)
+
+literalRange :: ParserShex ValueSetValue
+literalRange = range literal literal id LiteralStem (Stem . LiteralStem)
+
+
+range :: 
+     ParserShex a
+  -> ParserShex b
+  -> (a -> ObjectValue)
+  -> (a -> StemValue)
+  -> (b -> ValueSetValue)
+  -> ParserShex ValueSetValue
+range pVal pExc mkObj mkStem mkExc = do
+  val <- pVal
+  r <- optionMaybe (symbol '~' >> many (exclusion pExc))
+  return $ case r of
+    Nothing -> ObjectValue (mkObj val)
+    Just [] -> Stem $ mkStem val 
+    Just ex -> StemRange (mkStem val) (Just $ map mkExc ex)
+
+
+literal :: ParserShex ObjectValue
+literal = rdfLiteral <|> (NumericValue <$> numericLiteral) <|> booleanLiteral
+
+
+exclusion :: ParserShex a -> ParserShex a
+exclusion p = {-Stem <$>-}symbol '-' *> p <* symbol '~'
+
+iriExclusion :: ParserShex ValueSetValue
+iriExclusion = Stem . IRIStem <$> exclusion iri
 
 xsFacet :: ParserShex XsFacet
 xsFacet = try (XsStringFacet <$> stringFacet) <|> (XsNumericFacet <$> numericFacet)
@@ -85,7 +122,8 @@ patternStringFacet = do
   return $ PatternStringFacet strPat pat
 
 numericFacet :: ParserShex NumericFacet
-numericFacet = numericRange <*> numericLiteral
+numericFacet = (numericRange <*> numericLiteral) <|>
+               (numericLength <*> (read <$> many1 digit <* skippeables))
 
 numericRange :: ParserShex (NumericLiteral -> NumericFacet)
 numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
@@ -94,5 +132,10 @@ numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
                    (MaxExclusive <$> keyword "MAXEXCLUSIVE")
 
 numericLiteral :: ParserShex NumericLiteral
-numericLiteral = try (NumericInt . read <$> many1 digit <* skippeables) <|>
-                     (NumericDouble . read <$> many1 digit <* skippeables) -- TODO
+numericLiteral = try (NumericDouble <$> doubleLiteral <* skippeables)  <|>
+                     (NumericInt . read <$> many1 digit <* skippeables)
+
+numericLength :: ParserShex (Int -> NumericFacet)
+numericLength = (TotalDigits    <$> keyword "TOTALDIGITS") <|>
+                (FractionDigits <$> keyword "FRACTIONDIGITS")
+

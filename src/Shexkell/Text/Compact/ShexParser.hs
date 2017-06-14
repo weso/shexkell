@@ -105,7 +105,7 @@ shapeAnd = compositeShape shapeNot "AND" (ShapeAnd Nothing)
 
 shapeNot :: ParserShex ShapeExpr
 shapeNot = do
-  isNot <- isJust <$> optionMaybe (keyword "NOT")
+  isNot <- isJust <$> optionMaybe (try $ keyword "NOT")
   shape <- shapeAtom
   return $ if isNot then ShapeNot Nothing shape else shape
 
@@ -147,7 +147,7 @@ inlineShapeAnd = compositeShape inlineShapeNot "AND" (ShapeAnd Nothing)
 
 inlineShapeNot :: ParserShex ShapeExpr
 inlineShapeNot = do
-  isNot <- isJust <$> optionMaybe (keyword "NOT")
+  isNot <- isJust <$> optionMaybe (try $ keyword "NOT")
   sh <- inlineShapeAtom
   return $ if isNot then ShapeNot Nothing sh else sh
 
@@ -268,7 +268,7 @@ repeatRange = do
     symbol ','
     (Star <$ symbol '*') <|> (IntMax . read <$> many1 digit <* skippeables)
   symbol '}'
-  return (Just min, max)
+  return (Just min, Just $ fromMaybe (IntMax min) max)
 
 
 bracketedTripleExpr :: ParserShex TripleExpr

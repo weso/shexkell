@@ -12,7 +12,8 @@ import Control.Monad (void)
 
 iri :: ParserShex IRI
 iri = prefixedName <|>
-      withBase (between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri")
+      withBase (between (symbol '<') (symbol '>') (many1 (alphaNum <|> oneOf ":/.#-")) <?> "iri") <|>
+      typeA
 
 bnode :: Parsec String u String
 bnode = string "_:" >> many1 alphaNum <* skippeables <?> "bnode"   
@@ -26,12 +27,14 @@ prefixedName = try (pnameLn <|> pnameNs)
 pnameLn :: ParserShex IRI
 pnameLn = do
   pre   <- pnameNs
-  local <- many alphaNum <* skippeables
+  local <- many (alphaNum <|> oneOf "-") <* skippeables
   withPrefix pre local
 
 pnameNs :: Parsec String u String
 pnameNs = (many alphaNum <* char ':') <* skippeables
 
+typeA :: Parsec String u IRI
+typeA = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" <$ symbol 'a'
 
 symbol :: Char -> Parsec String u Char
 symbol sym = char sym <* skippeables

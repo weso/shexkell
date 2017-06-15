@@ -52,7 +52,7 @@ library
                      , deepseq >= 1.4.2.0
                      , mtl >= 2.2.1
                      , text >= 1.2.2.1
-                     , hxt-regex-xmlschema >= 9.2.0.3
+                     , regex-tdfa >= 1.2.2
                      , aeson 
                      , scientific
                      , abstract-par >= 0.1.0.0

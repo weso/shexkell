@@ -14,9 +14,9 @@ import Shexkell.Semantic.Datatype
 import Data.RDF (Node(..), LValue(TypedL, PlainL, PlainLL))
 import Data.String
 import Data.Text (Text)
-import qualified Data.Text as T (length, unpack)
+import qualified Data.Text as T
 import Data.Text.Read (decimal, double, Reader)
-import Text.Regex.XMLSchema.Generic (match)
+import Text.Regex.TDFA
 import Text.Read
 
 import Debug.Trace
@@ -129,17 +129,17 @@ instance NConstraint StringFacet where
   satisfiesConstraint node (LitStringFacet "MAXLENGTH" n) = (<= n) `satisfiesLength` node
 
   satisfiesConstraint node (PatternStringFacet _ patt) =
-    maybe False (`match` fromString patt) (nodeLex node)
+    maybe False (=~ patt) (T.unpack <$> nodeLex node)
 
   satisfiesConstraint node _                              = False
 
 instance NConstraint NumericFacet where
-  satisfiesConstraint node (MinInclusive _ lit) = compareLiteral (<= lit) node
-  satisfiesConstraint node (MinExclusive _ lit) = compareLiteral (< lit) node
-  satisfiesConstraint node (MaxInclusive _ lit) = compareLiteral (>= lit) node
-  satisfiesConstraint node (MaxExclusive _ lit) = compareLiteral (> lit) node
-  satisfiesConstraint (LNode (TypedL v _)) (TotalDigits _ n) = T.length v == n
-  satisfiesConstraint (LNode (TypedL v _)) (FractionDigits _ n)   = n <= (length (dropWhile (/= '.') $ show v) - 1)
+  satisfiesConstraint node (MinInclusive _ lit) = compareLiteral (>= lit) node
+  satisfiesConstraint node (MinExclusive _ lit) = compareLiteral (> lit) node
+  satisfiesConstraint node (MaxInclusive _ lit) = compareLiteral (<= lit) node
+  satisfiesConstraint node (MaxExclusive _ lit) = compareLiteral (< lit) node
+  satisfiesConstraint (LNode (TypedL v t)) (TotalDigits _ n) = isNumeric (getUriType t) && T.length (T.filter (/= '.') $ canonize v) == n
+  satisfiesConstraint (LNode (TypedL v t)) (FractionDigits _ n)   = isNumeric (getUriType t) && n >= (T.length (T.dropWhile (/= '.') (canonize v)) - 1)
   satisfiesConstraint _    _                   = False 
 
 
@@ -155,10 +155,11 @@ satisfiesLength :: (Int -> Bool) -> Node -> Bool
 satisfiesLength f node = maybe False (f . T.length) (nodeLex node)
 
 numericLiteral :: Node -> Maybe NumericLiteral
-numericLiteral (LNode (TypedL value t)) = getUriType t >>= toLiteral where
+numericLiteral (LNode (TypedL value t)) = toLiteral (getUriType t) where
   toLiteral XsdInteger = NumericInt <$> readTextWith decimal value
   toLiteral XsdDouble  = NumericDouble <$> readTextWith double value
   toLiteral XsdDecimal = NumericDecimal <$> readTextWith double value
+  toLiteral XsdFloat   = NumericDouble <$> readTextWith double value
   toLiteral _          = Nothing
 
 readTextWith :: Reader a -> Text -> Maybe a
@@ -169,6 +170,11 @@ readTextWith reader text = case reader text of
 compareLiteral :: (NumericLiteral -> Bool) -> Node -> Bool
 compareLiteral p = maybe False p . numericLiteral
 
+canonize :: T.Text -> T.Text
+canonize = removeTrailing . T.dropWhile (== '0') where
+  removeTrailing txt
+    | T.any (== '.') txt = T.dropWhileEnd (== '0') txt
+    | otherwise = txt
 
 
 

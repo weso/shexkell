@@ -17,7 +17,7 @@ import Debug.Trace
 
 nodeConstraint :: ParserShex ShapeExpr
 nodeConstraint =
-      literalKind <|>
+      try literalKind <|>
       nonLiteralKind <|>
       parseDataType <|>
       valueSet <|>
@@ -101,7 +101,7 @@ xsFacet :: ParserShex XsFacet
 xsFacet = try (XsStringFacet <$> stringFacet) <|> (XsNumericFacet <$> numericFacet)
 
 stringFacet :: ParserShex StringFacet
-stringFacet = try stringLengthFacet <|> patternStringFacet
+stringFacet = try patternStringFacet <|> stringLengthFacet 
 
 stringLengthFacet :: ParserShex StringFacet
 stringLengthFacet = do
@@ -116,10 +116,19 @@ stringLength = keyword "LENGTH" <|>
 
 patternStringFacet :: ParserShex StringFacet
 patternStringFacet = do
-  strPat <- keyword "PATTERN"
-  pat    <- char '\"' >> manyTill (noneOf "\"") (char '\"')
+  patt <- char '/' *> many1 (try (singleton <$> uchar) <|> (char '\\' `with` oneOf "/^nrt\\|.?*+(){}$-[]") <|> (singleton <$> noneOf "/\\\n\r")) <* char '/'
+  flags <- many $ oneOf "smix"
   skippeables
-  return $ PatternStringFacet strPat pat
+  return $ PatternStringFacet "PATTERN" (mconcat patt)
+  
+with :: ParserShex a -> ParserShex a -> ParserShex [a]
+p1 `with` p2 = do
+  a1 <- p1
+  (a1:) . singleton <$> p2
+
+singleton :: a -> [a]
+singleton a = [a]
+
 
 numericFacet :: ParserShex NumericFacet
 numericFacet = (numericRange <*> numericLiteral) <|>
@@ -127,8 +136,8 @@ numericFacet = (numericRange <*> numericLiteral) <|>
 
 numericRange :: ParserShex (NumericLiteral -> NumericFacet)
 numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
-                   (MinExclusive <$> keyword "MINEXCLUSIVE") <|>
-                   (MaxInclusive <$> keyword "MAXINCLUSIVE") <|>
+               try (MinExclusive <$> keyword "MINEXCLUSIVE") <|>
+               try (MaxInclusive <$> keyword "MAXINCLUSIVE") <|>
                    (MaxExclusive <$> keyword "MAXEXCLUSIVE")
 
 numericLiteral :: ParserShex NumericLiteral
@@ -139,3 +148,8 @@ numericLength :: ParserShex (Int -> NumericFacet)
 numericLength = (TotalDigits    <$> keyword "TOTALDIGITS") <|>
                 (FractionDigits <$> keyword "FRACTIONDIGITS")
 
+-- | For debugging purposes
+traceState :: ParserShex ()
+traceState = do
+  (State s _ _) <- getParserState
+  traceShowM s

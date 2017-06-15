@@ -51,7 +51,7 @@ doubleLeft = do
   dot <- char '.'
   right <- many digit
   exp <- fromMaybe "" <$> optionMaybe parseExponent
-  return $ left ++ (dot:right) ++ right ++ exp
+  return $ left ++ (dot:right) ++ exp
 
 doubleRight :: ParserShex String
 doubleRight = do

@@ -14,9 +14,11 @@ partitionTests :: Test
 partitionTests = TestList [
     testFound
   , testNotFound
+  , testFoundOneRight
 
   , testPartitionN1
   , testPartitionN2
+  , testPartitionSingleton
   ]
 
 
@@ -37,6 +39,12 @@ testFound = TestCase $ assertEqual
   "Test successful partition"
   (expectedPartition testPredFound testSet)
   (partition (== testPredFound) testSet)
+
+testFoundOneRight :: Test
+testFoundOneRight = TestCase $ assertEqual
+  "Test successful partition. One element on the right"
+  (Just (Set.fromList [1,2,3,4,5], Set.fromList [6]))
+  (partition (all (<= 5)) (Set.fromList [1, 2, 3, 4, 5, 6]))
 
 testNotFound :: Test
 testNotFound = TestCase $ assertEqual
@@ -74,3 +82,14 @@ testPartitionN2 = TestCase $ assertEqual
   (Just [Set.empty, Set.fromList [1, 2, 3, 4, 5]])
   (runPartitionN leftEmpty testData1 2)
   where leftEmpty [left, right] = Set.null left && right == Set.fromList [1, 2, 3, 4, 5]
+
+testPartitionSingleton :: Test
+testPartitionSingleton = TestCase $ assertEqual
+  "Test successful partitionN singleton"
+  (Just [Set.singleton (3 :: Int)])
+  (runPartitionN is3 (Set.singleton 3) 1)
+  where
+    is3 [s] = case Set.toList s of [3] -> True; _ -> False
+    is3 _ = False
+
+

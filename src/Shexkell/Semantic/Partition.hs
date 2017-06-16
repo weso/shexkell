@@ -6,12 +6,14 @@ module Shexkell.Semantic.Partition (
   , partitionN
   , mapdate
   , square
+  , largestOption  
 ) where
 
 import Control.Monad.Identity
 
 import qualified Data.Set as Set
-import Data.Foldable (asum, toList)
+import Data.List (sortBy)
+import Data.Foldable (asum, toList, maximumBy, minimumBy)
 import qualified Data.Sequence as Seq
 
 import Prelude hiding (pred)
@@ -44,7 +46,7 @@ findPartition :: (Monad m, Ord a) =>
   -> m (Maybe (Set.Set a, Set.Set a))
 findPartition p current@(left, _) = p left >>= checkPartition where
   checkPartition True  = return $ Just current
-  checkPartition False = asum <$> mapM (findPartition p) (Set.toList $ expand current)
+  checkPartition False = largestOption <$> mapM (findPartition p) (Set.toList $ expand current)
 
 -- | Gets the different combinations from a partition
 expand :: Ord a => (Set.Set a, Set.Set a) -> Set.Set (Set.Set a, Set.Set a)
@@ -85,3 +87,13 @@ mapdate ::
   -> [[a]]
   -> [[a]]
 mapdate f xs = zipWith (\r i -> toList $ Seq.adjust f i (Seq.fromList r)) xs [0..length xs]
+
+-- | From a list of 'Maybe's, take the element that has a value with the greatest
+--   size of the set in the left side
+largestOption :: Ord a => [Maybe (Set.Set a, Set.Set a)] -> Maybe (Set.Set a, Set.Set a)
+largestOption = asum . sortBy leftSize
+  where 
+    leftSize Nothing Nothing = EQ
+    leftSize (Just _) Nothing = GT
+    leftSize Nothing (Just _) = LT
+    leftSize (Just (left, _)) (Just (left', _)) = Set.size left' `compare` Set.size left

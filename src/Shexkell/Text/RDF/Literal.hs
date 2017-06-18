@@ -12,6 +12,9 @@ import Numeric
 import Data.Maybe (fromMaybe)
 
 
+tryParse :: Parsec String () a -> String -> Maybe a
+tryParse p = either (const Nothing) Just . parse (p <* eof) "RDF Literal"
+
 -----------------------------------
 -- * String Literal
 -----------------------------------
@@ -39,21 +42,28 @@ literalValue = try stringLiteralLong1 <|> try stringLiteralLong2 <|> stringTermi
 -- * Numeric Literal
 -----------------------------------
 
-doubleLiteral :: ParserShex Double
+intLiteral :: Parsec String st Int
+intLiteral = do
+  sign <- parseSign
+  value <- many1 digit
+  return $ read (sign ++ value)
+
+
+doubleLiteral :: Parsec String st Double
 doubleLiteral = do
-  sign <- maybe [] show <$> optionMaybe (char '+' <|> char '-')
+  sign <- parseSign
   double <- try doubleLeft <|> doubleRight
   return $ read (sign ++ double)
 
-doubleLeft :: ParserShex String
+doubleLeft :: Parsec String st String
 doubleLeft = do
   left <- many1 digit
   dot <- char '.'
   right <- many digit
-  exp <- fromMaybe "" <$> optionMaybe parseExponent
+  exp <- moption parseExponent
   return $ left ++ (dot:right) ++ exp
 
-doubleRight :: ParserShex String
+doubleRight :: Parsec String st String
 doubleRight = do
   dot <- optionMaybe $ char '.'
   right <- many1 digit
@@ -63,12 +73,19 @@ doubleRight = do
         Nothing -> ""
   return $ left ++ right ++ exp
 
-parseExponent :: ParserShex String
+parseExponent :: Parsec String st String
 parseExponent = do
   e <- char 'e' <|> char 'E'
-  sign <- fromMaybe '+' <$> optionMaybe (char '+' <|> char '-')
+  sign <- parseSign
   value <- many1 digit
-  return (e:sign:value)
+  return (e:(sign ++ value))
+
+parseSign :: Parsec String st String
+parseSign = returnSign <$> optionMaybe (char '+' <|> char '-') where
+  returnSign Nothing = []
+  returnSign (Just '+') = []
+  returnSign (Just '-') = "-"
+
 
 
 -----------------------------------
@@ -154,5 +171,5 @@ readUnicode :: String -> Char
 readUnicode = toEnum . fst . head . readHex
 
 
-moption :: Monoid m => ParserShex m -> ParserShex m
+moption :: Monoid m => Parsec String st m -> Parsec String st m
 moption = option mempty

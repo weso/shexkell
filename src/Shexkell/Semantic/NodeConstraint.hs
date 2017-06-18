@@ -13,11 +13,9 @@ import Shexkell.Semantic.Datatype
 
 import Data.RDF (Node(..), LValue(TypedL, PlainL, PlainLL))
 import Data.String
-import Data.Text (Text)
+import Data.Maybe (isJust)
 import qualified Data.Text as T
-import Data.Text.Read (decimal, double, Reader)
 import Text.Regex.TDFA
-import Text.Read
 
 import Debug.Trace
 
@@ -96,6 +94,8 @@ nodeSatisfiesDataType _  _                       = False
 instance NConstraint ValueSetValue where
   satisfiesConstraint node (ObjectValue oValue) = satisfiesConstraint node oValue
   satisfiesConstraint (UNode uri) (Stem (IRIStem iri))    = uri == fromString iri 
+  satisfiesConstraint node (StemRange Wildcard (Just excl)) = not $ any (satisfiesConstraint node) excl
+  satisfiesConstraint _ _ = False
 
 instance NConstraint ObjectValue where
   -- IRI
@@ -108,11 +108,9 @@ instance NConstraint ObjectValue where
   satisfiesConstraint (LNode (PlainLL value lang)) (LangString value' lang') =
     value == fromString value' && lang == fromString lang'
 
-  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#integer")) (NumericValue (NumericInt value')) = maybe False (== value') (readMaybe $ T.unpack value)
-  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#double")) (NumericValue (NumericDouble value')) = maybe False (== value') (readMaybe $ T.unpack value)
-  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#decimal")) (NumericValue (NumericDouble value')) = maybe False (== value') (readMaybe $ T.unpack value)
-  satisfiesConstraint (LNode (TypedL value "http://www.w3.org/2001/XMLSchema#decimal")) (NumericValue (NumericDecimal value')) = maybe False (== value') (readMaybe $ T.unpack value)
-
+  -- Numerics literals
+  satisfiesConstraint n@(LNode (TypedL _ _)) (NumericValue value') = maybe False (== value') (nodeVal n)
+ 
   satisfiesConstraint _ _ = False
 
 ----------------------------------------------------------------------
@@ -131,19 +129,37 @@ instance NConstraint StringFacet where
   satisfiesConstraint node (PatternStringFacet _ patt) =
     maybe False (=~ patt) (T.unpack <$> nodeLex node)
 
-  satisfiesConstraint node _                              = False
+  satisfiesConstraint _ _                              = False
 
 instance NConstraint NumericFacet where
   satisfiesConstraint node (MinInclusive _ lit) = compareLiteral (>= lit) node
   satisfiesConstraint node (MinExclusive _ lit) = compareLiteral (> lit) node
   satisfiesConstraint node (MaxInclusive _ lit) = compareLiteral (<= lit) node
   satisfiesConstraint node (MaxExclusive _ lit) = compareLiteral (< lit) node
-  satisfiesConstraint (LNode (TypedL v t)) (TotalDigits _ n) = isNumeric (getUriType t) && T.length (T.filter (/= '.') $ canonize v) == n
-  satisfiesConstraint (LNode (TypedL v t)) (FractionDigits _ n)   = isNumeric (getUriType t) && n >= (T.length (T.dropWhile (/= '.') (canonize v)) - 1)
+
+  -- | TotalDigits constraint
+  satisfiesConstraint node@(LNode (TypedL v t)) (TotalDigits _ n) = 
+    -- The value matches the type
+    isJust (nodeVal node) &&
+    -- The type derives decimal
+    mkType t `isDerivedOf` decimalType &&
+    -- The length constraint is satisfied
+    T.length (T.filter (/= '.') $ canonize v) <= n
+
+  -- | FractionDigits constraint
+  satisfiesConstraint node@(LNode (TypedL v t)) (FractionDigits _ n) =
+    -- The value matches the type
+    isJust (nodeVal node) &&
+    -- The type derives decimal
+    mkType t `isDerivedOf` decimalType && 
+    -- The length constraint is satisfied
+    n >= (T.length (T.dropWhile (/= '.') (canonize v)) - 1)
+
   satisfiesConstraint _    _                   = False 
 
 
-nodeLex :: Node -> Maybe Text
+-- | Obtains the lexic value of a node
+nodeLex :: Node -> Maybe T.Text
 nodeLex (UNode iri)              = Just iri
 nodeLex (BNode text)             = Just text
 nodeLex (LNode (PlainL text))    = Just text
@@ -151,25 +167,22 @@ nodeLex (LNode (PlainLL text _)) = Just text
 nodeLex (LNode (TypedL text _))  = Just text
 nodeLex _                        = Nothing
 
+-- | Obtains the numeric value of a typed node
+nodeVal :: Node -> Maybe NumericLiteral
+nodeVal (LNode (TypedL v t)) = getValue (mkType t) (T.unpack v)
+nodeVal _ = Nothing
+
+-- | Obtains the length of the lexic value of a node and feeds it to a given
+--   predicate. If the length obtaining fails, returns False
 satisfiesLength :: (Int -> Bool) -> Node -> Bool
-satisfiesLength f node = maybe False (f . T.length) (nodeLex node)
+satisfiesLength f = maybe False (f . T.length) . nodeLex
 
-numericLiteral :: Node -> Maybe NumericLiteral
-numericLiteral (LNode (TypedL value t)) = toLiteral (getUriType t) where
-  toLiteral XsdInteger = NumericInt <$> readTextWith decimal value
-  toLiteral XsdDouble  = NumericDouble <$> readTextWith double value
-  toLiteral XsdDecimal = NumericDecimal <$> readTextWith double value
-  toLiteral XsdFloat   = NumericDouble <$> readTextWith double value
-  toLiteral _          = Nothing
-
-readTextWith :: Reader a -> Text -> Maybe a
-readTextWith reader text = case reader text of
-  Left _ -> Nothing
-  Right (res, _) -> Just res
-
+-- | Obtains the numeric value of a node and feeds it to a given predicate.
+--   If the node doesn't have a numeric value, returns False 
 compareLiteral :: (NumericLiteral -> Bool) -> Node -> Bool
-compareLiteral p = maybe False p . numericLiteral
+compareLiteral p = maybe False p . nodeVal
 
+-- | Canonizes a numeric value. Removes trailing and leading zeroes
 canonize :: T.Text -> T.Text
 canonize = removeTrailing . T.dropWhile (== '0') where
   removeTrailing txt

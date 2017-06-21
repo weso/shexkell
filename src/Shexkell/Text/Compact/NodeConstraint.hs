@@ -26,15 +26,15 @@ nodeConstraint =
 
 literalKind :: ParserShex ShapeExpr
 literalKind = do
-  keyword "LITERAL"
+  keyword' "LITERAL"
   facets <- many xsFacet
   return $ NodeConstraint Nothing (Just [LiteralKind]) Nothing facets Nothing
 
 nonLiteralKind :: ParserShex ShapeExpr
 nonLiteralKind = do
-  kind <- (IRIKind <$ keyword "IRI") <|>
-          (BNodeKind <$ keyword "BNODE") <|>
-          (NonLiteralKind <$ keyword "NONLITERAL")
+  kind <- (IRIKind <$ keyword' "IRI") <|>
+          (BNodeKind <$ keyword' "BNODE") <|>
+          (NonLiteralKind <$ keyword' "NONLITERAL")
   facets <- map XsStringFacet <$> many stringFacet
   return $ NodeConstraint Nothing (Just [kind]) Nothing facets Nothing
 
@@ -51,7 +51,7 @@ valueSet = do
   return $ NodeConstraint Nothing Nothing Nothing facets (Just vs)
 
 valueSetValue :: ParserShex ValueSetValue
-valueSetValue = iriRange <|> literalRange
+valueSetValue = iriRange <|> literalRange <|> StemRange Wildcard . Just . map ObjectValue <$> (symbol '.' >> many1 (exclusion ((IRIValue <$> iri) <|> literal)))
 
 iriRange :: ParserShex ValueSetValue
 -- iriRange = (do
@@ -92,7 +92,7 @@ literal = rdfLiteral <|> (NumericValue <$> numericLiteral) <|> booleanLiteral
 
 
 exclusion :: ParserShex a -> ParserShex a
-exclusion p = {-Stem <$>-}symbol '-' *> p <* symbol '~'
+exclusion p = {-Stem <$>-}symbol '-' *> p <* optional (symbol '~')
 
 iriExclusion :: ParserShex ValueSetValue
 iriExclusion = Stem . IRIStem <$> exclusion iri
@@ -110,9 +110,9 @@ stringLengthFacet = do
   return $ LitStringFacet strLen len
 
 stringLength :: ParserShex String
-stringLength = keyword "LENGTH" <|>
-               try (keyword "MAXLENGTH") <|>
-                   keyword "MINLENGTH"
+stringLength = keyword' "LENGTH" <|>
+               try (keyword' "MAXLENGTH") <|>
+                   keyword' "MINLENGTH"
 
 patternStringFacet :: ParserShex StringFacet
 patternStringFacet = do
@@ -135,18 +135,18 @@ numericFacet = (numericRange <*> numericLiteral) <|>
                (numericLength <*> (read <$> many1 digit <* skippeables))
 
 numericRange :: ParserShex (NumericLiteral -> NumericFacet)
-numericRange = try (MinInclusive <$> keyword "MININCLUSIVE") <|>
-               try (MinExclusive <$> keyword "MINEXCLUSIVE") <|>
-               try (MaxInclusive <$> keyword "MAXINCLUSIVE") <|>
-                   (MaxExclusive <$> keyword "MAXEXCLUSIVE")
+numericRange = try (MinInclusive <$> keyword' "MININCLUSIVE") <|>
+               try (MinExclusive <$> keyword' "MINEXCLUSIVE") <|>
+               try (MaxInclusive <$> keyword' "MAXINCLUSIVE") <|>
+                   (MaxExclusive <$> keyword' "MAXEXCLUSIVE")
 
 numericLiteral :: ParserShex NumericLiteral
 numericLiteral = try (NumericDouble <$> doubleLiteral <* skippeables)  <|>
                      (NumericInt . read <$> many1 digit <* skippeables)
 
 numericLength :: ParserShex (Int -> NumericFacet)
-numericLength = (TotalDigits    <$> keyword "TOTALDIGITS") <|>
-                (FractionDigits <$> keyword "FRACTIONDIGITS")
+numericLength = (TotalDigits    <$> keyword' "TOTALDIGITS") <|>
+                (FractionDigits <$> keyword' "FRACTIONDIGITS")
 
 -- | For debugging purposes
 traceState :: ParserShex ()

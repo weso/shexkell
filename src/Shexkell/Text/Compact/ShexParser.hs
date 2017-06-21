@@ -44,7 +44,7 @@ shexDoc :: ParserShex Schema
 shexDoc = do
   skippeables
   dir <- many directive
-  st <- optionMaybe  notStartAction
+  st <- optionMaybe  (try notStartAction)
   statements <- many statement
   eof
 
@@ -77,14 +77,14 @@ directive :: ParserShex Directive
 directive = (Base <$> (baseDecl >>= putBase)) <|> (Prefix <$> prefixDecl)
 
 parseStart :: ParserShex ShapeExpr
-parseStart = keyword "start" >> symbol '=' >> parseShapeExpr
+parseStart = keyword' "start" >> symbol '=' >> parseShapeExpr
 
 baseDecl :: ParserShex IRI
-baseDecl = keyword "BASE" >> iri
+baseDecl = keyword' "BASE" >> iri
 
 prefixDecl :: ParserShex PrefixMapping
 prefixDecl = do
-  keyword "PREFIX"
+  keyword' "PREFIX"
   pname <- pnameNs 
   iriref  <- iri
   putPrefix pname iriref
@@ -105,7 +105,7 @@ shapeAnd = compositeShape shapeNot "AND" (ShapeAnd Nothing)
 
 shapeNot :: ParserShex ShapeExpr
 shapeNot = do
-  isNot <- isJust <$> optionMaybe (try $ keyword "NOT")
+  isNot <- isJust <$> optionMaybe (try $ keyword' "NOT")
   shape <- shapeAtom
   return $ if isNot then ShapeNot Nothing shape else shape
 
@@ -133,8 +133,8 @@ shapeDefinition = do
   return $ Shape Nothing Nothing closed extras expr Nothing Nothing
 
 extraOrClosed :: ParserShex (Either [IRI] Bool)
-extraOrClosed = (Right True <$ keyword "CLOSED") <|>
-                Left <$> (keyword "EXTRA" >> many1 iri)
+extraOrClosed = (Right True <$ keyword' "CLOSED") <|>
+                Left <$> (keyword' "EXTRA" >> many1 iri)
 
 inlineShapeExpr :: ParserShex ShapeExpr
 inlineShapeExpr = inlineShapeOr
@@ -147,7 +147,7 @@ inlineShapeAnd = compositeShape inlineShapeNot "AND" (ShapeAnd Nothing)
 
 inlineShapeNot :: ParserShex ShapeExpr
 inlineShapeNot = do
-  isNot <- isJust <$> optionMaybe (try $ keyword "NOT")
+  isNot <- isJust <$> optionMaybe (try $ keyword' "NOT")
   sh <- inlineShapeAtom
   return $ if isNot then ShapeNot Nothing sh else sh
 
@@ -189,7 +189,7 @@ compositeShape ::
   -> ParserShex ShapeExpr
 compositeShape leaf word constructor = do
   sh <- leaf
-  shs <- many $ keyword word >> leaf
+  shs <- many $ keyword' word >> leaf
   return $ case shs of
     [] -> sh
     _  -> constructor (sh:shs)

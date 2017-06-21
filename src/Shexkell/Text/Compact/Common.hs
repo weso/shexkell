@@ -7,6 +7,8 @@ import Shexkell.Data.Common
 import Text.ParserCombinators.Parsec
 import Text.Parsec (Parsec)
 
+import Data.Char (toLower, toUpper)
+
 import Control.Monad (void)
 
 
@@ -42,8 +44,16 @@ symbol sym = char sym <* skippeables
 keyword :: String -> Parsec String u String
 keyword str = string str <* skippeables
 
+keyword' :: String -> Parsec String u String
+keyword' str = caseInsensitive str <* skippeables
+
 skippeables :: Parsec String u ()
 skippeables = between spaces spaces (void parseComment <|> spaces)
 
 parseComment :: Parsec String u String
 parseComment = (char '#' >> manyTill anyChar (void (many1 newline) <|> eof)) <?> "comment"
+
+caseInsensitive :: String -> Parsec String u String
+caseInsensitive str = str <$ mapM caseInsensitiveChar str where 
+  caseInsensitiveChar :: Char -> Parsec String u Char
+  caseInsensitiveChar ch = char (toLower ch) <|> char (toUpper ch)
